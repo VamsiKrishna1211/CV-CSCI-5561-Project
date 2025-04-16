@@ -1,38 +1,46 @@
+import logging
 import os
+import zipfile
+
+import lightning.pytorch as pl
+import matplotlib.pyplot as plt
+
 # os.environ['HF_HOME'] = r"D:\.cache\hf"
 import numpy as np
-import torch
-from torch import nn
-from PIL import Image
 import requests
-from transformers import AutoModel, AutoProcessor
-from torchvision.ops import MultiScaleRoIAlign
-from torchvision.models.detection.mask_rcnn import MaskRCNN, RPNHead, MaskRCNNHeads, MaskRCNNPredictor
-from torchvision.models.detection import MaskRCNN
-from torchvision.models.detection.faster_rcnn import AnchorGenerator, FastRCNNPredictor, FastRCNNConvFCHead
-from torchvision.ops import FeaturePyramidNetwork
-from torchvision.datasets import CocoDetection
-from torch.utils.data import DataLoader
+import torch
 import torchvision.transforms as T
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-import zipfile
-from tqdm import tqdm
-import logging
-from pycocotools import mask as coco_mask
-
-from lightning.pytorch import seed_everything
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning.pytorch.loggers import TensorBoardLogger
-import lightning.pytorch as pl
-from lightning import Trainer
-from lightning.pytorch.callbacks import EarlyStopping
-from lightning.pytorch.callbacks import LearningRateMonitor
-
 from fastprogress.fastprogress import master_bar, progress_bar
+from lightning import Trainer
+from lightning.pytorch import seed_everything
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
+from lightning.pytorch.loggers import TensorBoardLogger
+from matplotlib.patches import Patch
+from PIL import Image
+from pycocotools import mask as coco_mask
+from torch import nn
 from torch.optim.lr_scheduler import OneCycleLR
-
-
+from torch.utils.data import DataLoader
+from torchvision.datasets import CocoDetection
+from torchvision.models.detection import MaskRCNN
+from torchvision.models.detection.faster_rcnn import (
+    AnchorGenerator,
+    FastRCNNConvFCHead,
+    FastRCNNPredictor,
+)
+from torchvision.models.detection.mask_rcnn import (
+    MaskRCNN,
+    MaskRCNNHeads,
+    MaskRCNNPredictor,
+    RPNHead,
+)
+from torchvision.ops import FeaturePyramidNetwork, MultiScaleRoIAlign
+from tqdm import tqdm
+from transformers import AutoModel, AutoProcessor
 
 seed_everything(42)
 # Set the random seed for reproducibility
@@ -260,6 +268,8 @@ def train_model_with_onecyclelr(
     # Use GradScaler for mixed precision training
     scaler = torch.amp.GradScaler()
 
+    min_loss = torch.tensor(float("inf"))
+
     # Progress bar for epochs
     mb = master_bar(range(num_epochs))
     for epoch in mb:
@@ -293,10 +303,16 @@ def train_model_with_onecyclelr(
             # Track running loss
             running_loss += losses.item() * gradient_accumulation_steps  # Multiply back to get the actual loss
             pb.comment = f"Batch {i}, Loss: {losses.item() * gradient_accumulation_steps:.4f}, Current LR: {scheduler.get_last_lr()}"  # Update progress bar comment
-
         # Epoch loss
         epoch_loss = running_loss / len(train_loader)
         mb.write(f"Epoch {epoch + 1} Loss: {epoch_loss:.4f}")
+
+        if epoch_loss < min_loss:
+            min_loss = epoch_loss
+            torch.save(model.state_dict(), f"segmentation_model_loss_{epoch_loss:.4f}.pth")
+            mb.write(f"Model saved with loss: {min_loss:.4f}")
+        else:
+            mb.write(f"Model not saved, current loss: {epoch_loss:.4f}, previous min loss: {min_loss:.4f}")
 
         # Validation loop
         # model.eval()
