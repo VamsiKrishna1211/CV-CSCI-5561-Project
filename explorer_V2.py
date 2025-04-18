@@ -24,13 +24,14 @@ from torchvision.models.detection.mask_rcnn import (
 )
 from torchvision.ops import FeaturePyramidNetwork, MultiScaleRoIAlign
 from transformers import AutoModel
-import lightning.pytorch as pl
+import lightning as pl
 from lightning.pytorch.callbacks import (
     EarlyStopping,
     LearningRateMonitor,
     ModelCheckpoint,
 )
 from lightning.pytorch.loggers import WandbLogger
+# from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from tqdm import tqdm
 import requests
 
@@ -47,11 +48,11 @@ def parse_args():
                         help="Hugging Face model name for SAM backbone")
     parser.add_argument('--num-epochs', type=int, default=10,
                         help="Number of training epochs")
-    parser.add_argument('--batch-size', type=int, default=4,
+    parser.add_argument('--batch-size', type=int, default=16,
                         help="Batch size for data loaders")
     parser.add_argument('--num-workers', type=int, default=16,
                         help="Number of workers for data loaders")
-    parser.add_argument('--gradient-accumulation-steps', type=int, default=128,
+    parser.add_argument('--gradient-accumulation-steps', type=int, default=32,
                         help="Number of batches to accumulate gradients over")
     parser.add_argument('--learning-rate', type=float, default=0.005,
                         help="Initial learning rate for SGD optimizer")
@@ -67,6 +68,9 @@ def parse_args():
                         help="Random seed for reproducibility")
     parser.add_argument('--device', type=str, default=None,
                         help="Device to use (cuda or cpu); defaults to cuda if available")
+    parser.add_argument('--wandb-project', type=str, default="cv-course-project",
+                        help="Weights and Biases project name")
+    parser.add_argument("--log_steps", type=int, default=5,)
     return parser.parse_args()
 
 args = parse_args()
@@ -92,7 +96,7 @@ console_logger = logging.getLogger(__name__)
 COCO_URLS = {
     "train2017": "http://images.cocodataset.org/zips/train2017.zip",
     "val2017": "http://images.cocodataset.org/zips/val2017.zip",
-    "test2017": "http://images.cocodataset.org/zips/test2017.zip",
+    # "test2017": "http://images.cocodataset.org/zips/test2017.zip",
     "annotations": "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
 }
 
@@ -160,7 +164,7 @@ def download_coco_dataset(base_dir):
     required_dirs = {
         "train2017": os.path.join(images_dir, "train2017"),
         "val2017": os.path.join(images_dir, "val2017"),
-        "test2017": os.path.join(images_dir, "test2017"),
+        # "test2017": os.path.join(images_dir, "test2017"),
         "annotations": annotations_dir
     }
     all_complete = True
@@ -214,10 +218,11 @@ def freeze_model(model: torch.nn.Module):
 class MaskRCNNLightning(pl.LightningModule):
     def __init__(self, model_name=args.model_name, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay):
         super().__init__()
-        self.save_hyperparameters()
         self.lr = lr
         self.momentum = momentum
         self.weight_decay = weight_decay
+
+        self.save_hyperparameters()
         # Initialize backbone
         backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
         freeze_model(backbone)
@@ -273,7 +278,9 @@ class MaskRCNNLightning(pl.LightningModule):
         targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
         loss_dict = self.model(images, targets)
         losses = sum(loss for loss in loss_dict.values())
-        self.log('train_loss', losses, prog_bar=True, sync_dist=True)
+
+        self.log('train/loss', losses.item(), prog_bar=True, on_step=True, on_epoch=True, logger=True)
+
         return losses
 
     def configure_optimizers(self):
@@ -483,7 +490,14 @@ if __name__ == "__main__":
     )
     
     # Set up W&B logger
-    wandb_logger = WandbLogger(project="maskrcnn", log_model="all")
+    wandb_logger = WandbLogger(project=args.wandb_project, log_model="all")
+
+    wandb_logger.watch(model)
+
+    # tensorboard_logger = TensorBoardLogger(
+    #     save_dir="logs",
+    #     name=args.wandb_project,        
+    # )
     
     # Initialize trainer
     trainer = pl.Trainer(
@@ -493,7 +507,8 @@ if __name__ == "__main__":
         callbacks=[checkpoint_callback, lr_monitor, early_stopping],
         logger=wandb_logger,
         accumulate_grad_batches=args.gradient_accumulation_steps,
-        precision='16-mixed',
+        precision='bf16-mixed',
+        log_every_n_steps=args.log_steps,
     )
     
     # Train the model
