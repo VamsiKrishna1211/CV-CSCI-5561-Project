@@ -47,7 +47,7 @@ def parse_args():
                         help="Hugging Face model name for SAM backbone")
     parser.add_argument('--num-epochs', type=int, default=10,
                         help="Number of training epochs")
-    parser.add_argument('--batch-size', type=int, default=4,
+    parser.add_argument('--batch-size', type=int, default=2,
                         help="Batch size for data loaders")
     parser.add_argument('--num-workers', type=int, default=16,
                         help="Number of workers for data loaders")
@@ -65,7 +65,7 @@ def parse_args():
                         help="Path to the image for mask generation")
     parser.add_argument('--seed', type=int, default=42,
                         help="Random seed for reproducibility")
-    parser.add_argument('--device', type=str, default=None,
+    parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="Device to use (cuda or cpu); defaults to cuda if available")
     return parser.parse_args()
 
@@ -317,7 +317,7 @@ class COCODataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         download_coco_dataset(self.base_dir)
-        for path in [self.train_dir, self.val_dir, self.train_ann, self.val_ann]:
+        for path in [self.train_ann, self.val_ann]:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"Required dataset file/directory not found: {path}")
             console_logger.info(f"Verified existence of {path}")
