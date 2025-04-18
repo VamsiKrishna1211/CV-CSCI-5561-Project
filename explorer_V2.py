@@ -66,7 +66,7 @@ def parse_args():
                         help="Path to the image for mask generation")
     parser.add_argument('--seed', type=int, default=42,
                         help="Random seed for reproducibility")
-    parser.add_argument('--device', type=str, default=None,
+    parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                         help="Device to use (cuda or cpu); defaults to cuda if available")
     parser.add_argument('--wandb-project', type=str, default="cv-course-project",
                         help="Weights and Biases project name")
@@ -324,7 +324,7 @@ class COCODataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         download_coco_dataset(self.base_dir)
-        for path in [self.train_dir, self.val_dir, self.train_ann, self.val_ann]:
+        for path in [self.train_ann, self.val_ann]:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"Required dataset file/directory not found: {path}")
             console_logger.info(f"Verified existence of {path}")
