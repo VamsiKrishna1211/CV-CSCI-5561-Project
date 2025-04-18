@@ -1,3 +1,4 @@
 dataset/
-coco
-wandb
+coco/
+wandb/
+
