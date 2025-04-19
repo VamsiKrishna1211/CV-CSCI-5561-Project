@@ -500,15 +500,18 @@ if __name__ == "__main__":
     model = MaskRCNNLightning()
     
     # Set up callbacks
+    best_checkpoint_path = args.logs_dir / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth'
     checkpoint_callback = ModelCheckpoint(
         monitor='train/loss',
-        filename=args.logs_dir / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
+        filename=str(best_checkpoint_path),
         save_top_k=4,
         mode='min',
         # enable_version_counter=False,
     )
+
+    step_save_path = args.logs_dir / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth'
     step_checkpoint = ModelCheckpoint(
-        filename=args.logs_dir / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
+        filename=str(step_save_path),
         every_n_train_steps=20,
         save_on_train_epoch_end=True,
         enable_version_counter=False
