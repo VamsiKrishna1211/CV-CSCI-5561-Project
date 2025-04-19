@@ -483,13 +483,13 @@ if __name__ == "__main__":
     # Set up callbacks
     checkpoint_callback = ModelCheckpoint(
         monitor='train/loss',
-        filename=args.logs / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
+        filename=args.logs_dir / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
         save_top_k=4,
         mode='min',
         # enable_version_counter=False,
     )
     step_checkpoint = ModelCheckpoint(
-        filename=args.logs / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
+        filename=args.logs_dir / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
         every_n_train_steps=20,
         save_on_train_epoch_end=True,
         enable_version_counter=False
