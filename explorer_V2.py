@@ -71,6 +71,7 @@ def parse_args():
     parser.add_argument('--wandb-project', type=str, default="cv-course-project",
                         help="Weights and Biases project name")
     parser.add_argument("--log_steps", type=int, default=5,)
+    parser.add_argument("--resume-ckpt-path", type=str, default=None, help="The path for the checkpoint to resume at")
     return parser.parse_args()
 
 args = parse_args()
@@ -481,13 +482,14 @@ if __name__ == "__main__":
         save_top_k=4,
         mode='min',
         save_on_train_epoch_end=True,
+        every_n_train_steps=20
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     early_stopping = EarlyStopping(
         monitor='train/loss',
         patience=3,
         mode='min',
-        min_delta=1e-4
+        min_delta=1e-5
     )
     
     # Set up W&B logger
@@ -513,7 +515,7 @@ if __name__ == "__main__":
     )
     
     # Train the model
-    trainer.fit(model, datamodule=data_module)
+    trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_ckpt_path)
     
     # Generate and visualize masks
     masks, original_image, processed_image, predictions = generate_masks(model)
