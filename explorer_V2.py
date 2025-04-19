@@ -76,6 +76,16 @@ def parse_args():
                         help="The path for the checkpoint to resume at")
     parser.add_argument("--logs-dir", default="logs",
                         help="Folder to save the running logs and weights etc stuff.")
+    parser.add_argument("--classfier-loss-weight", type=float, default=1,
+                        help="Classifer loss weight when calculating the combined loss")
+    parser.add_argument("--bbox-reg-loss-weight", type=float, default=1.0,
+                        help="Bounding Box regression loss weight")
+    parser.add_argument("--mask-loss-weight", type=float, default=1.0,
+                        help="Mask loss weight")
+    parser.add_argument("--objectness-loss-weight", type=float, default=1.0,
+                        help="Objectness loss weight")
+    parser.add_argument("--rpn-bbox-reg-loss-weight", type=float, default=1.0,
+                        help="Region Proposan network bbox loss weight")
     return parser.parse_args()
 
 args = parse_args()
@@ -97,6 +107,14 @@ device = args.device if args.device else "cuda" if torch.cuda.is_available() els
 # Set up console logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 console_logger = logging.getLogger(__name__)
+
+loss_weights = {
+    'loss_classifier': args.classfier_loss_weight,
+    'loss_box_reg': args.bbox_reg_loss_weight,
+    'loss_mask': args.mask_loss_weight,
+    'loss_objectness': args.objectness_loss_weight,
+    'loss_rpn_box_reg': args.rpn_bbox_reg_loss_weight
+}
 
 # COCO dataset URLs and classes
 COCO_URLS = {
@@ -283,7 +301,8 @@ class MaskRCNNLightning(pl.LightningModule):
         images = list(image.to(self.device) for image in images)
         targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
         loss_dict = self.model(images, targets)
-        losses = sum(loss for loss in loss_dict.values())
+        losses = sum(loss * loss_weights[key] for key, loss in loss_dict.items())
+        
 
         self.log('train/loss', losses.item(), prog_bar=True, on_step=True, on_epoch=True, logger=True)
 
