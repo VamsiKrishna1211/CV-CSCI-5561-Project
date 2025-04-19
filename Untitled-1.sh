@@ -1,0 +1,1 @@
+python explorer_V2.py --base-dir "dataset" --train-ann "annotations/instances_train2017.json" --val-ann "annotations/instances_val2017.json" --num-epochs 10 --batch-size 4 --num-workers 16 --gradient-accumulation-steps 1 --learning-rate 0.005 --momentum 0.9 --weight-decay 0.0005 --target-size 1024 1024 --image-path "/path/to/image.png" --seed 42 --device "cuda"

@@ -476,17 +476,18 @@ if __name__ == "__main__":
     
     # Set up callbacks
     checkpoint_callback = ModelCheckpoint(
-        monitor='train_loss',
-        filename='maskrcnn-{epoch:02d}-{train_loss:.4f}',
-        save_top_k=1,
+        monitor='train/loss',
+        filename='maskrcnn-{epoch:02d}-{train/loss:.4f}',
+        save_top_k=4,
         mode='min',
+        save_on_train_epoch_end=True,
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     early_stopping = EarlyStopping(
-        monitor='train_loss',
+        monitor='train/loss',
         patience=3,
         mode='min',
-        min_delta=0.0
+        min_delta=1e-4
     )
     
     # Set up W&B logger
