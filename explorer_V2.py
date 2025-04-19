@@ -309,11 +309,16 @@ class MaskRCNNLightning(pl.LightningModule):
         return losses
 
     def configure_optimizers(self):
-        optimizer = torch.optim.SGD(
+        # optimizer = torch.optim.SGD(
+        #     self.parameters(),
+        #     lr=self.lr,
+        #     momentum=self.momentum,
+        #     weight_decay=self.weight_decay
+        # )
+        optimizer = torch.optim.AdamW(
             self.parameters(),
-            lr=self.lr,
-            momentum=self.momentum,
-            weight_decay=self.weight_decay
+            lr = self.lr,
+            weight_decay=args.weight_decay
         )
         # Calculate total steps accounting for gradient accumulation
         accumulate_grad_batches = self.trainer.accumulate_grad_batches
