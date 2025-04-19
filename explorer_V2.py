@@ -34,6 +34,7 @@ from lightning.pytorch.loggers import WandbLogger
 # from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from tqdm import tqdm
 import requests
+from pathlib import Path
 
 # Parse command-line arguments
 def parse_args():
@@ -71,10 +72,14 @@ def parse_args():
     parser.add_argument('--wandb-project', type=str, default="cv-course-project",
                         help="Weights and Biases project name")
     parser.add_argument("--log_steps", type=int, default=5,)
-    parser.add_argument("--resume-ckpt-path", type=str, default=None, help="The path for the checkpoint to resume at")
+    parser.add_argument("--resume-ckpt-path", type=str, default=None, 
+                        help="The path for the checkpoint to resume at")
+    parser.add_argument("--logs-dir", default="logs",
+                        help="Folder to save the running logs and weights etc stuff.")
     return parser.parse_args()
 
 args = parse_args()
+args.logs_dir = Path(args.logs_dir)
 
 # Set random seed
 pl.seed_everything(args.seed, workers=True)
@@ -478,11 +483,16 @@ if __name__ == "__main__":
     # Set up callbacks
     checkpoint_callback = ModelCheckpoint(
         monitor='train/loss',
-        filename='maskrcnn-{epoch:02d}-{train/loss:.4f}',
+        filename=args.logs / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
         save_top_k=4,
         mode='min',
+        # enable_version_counter=False,
+    )
+    step_checkpoint = ModelCheckpoint(
+        filename=args.logs / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth',
+        every_n_train_steps=20,
         save_on_train_epoch_end=True,
-        every_n_train_steps=20
+        enable_version_counter=False
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     early_stopping = EarlyStopping(
@@ -507,7 +517,7 @@ if __name__ == "__main__":
         max_epochs=args.num_epochs,
         accelerator='gpu' if device == 'cuda' else 'cpu',
         devices=1,
-        callbacks=[checkpoint_callback, lr_monitor, early_stopping],
+        callbacks=[checkpoint_callback, lr_monitor, early_stopping, step_checkpoint],
         logger=wandb_logger,
         accumulate_grad_batches=args.gradient_accumulation_steps,
         precision='bf16-mixed',
