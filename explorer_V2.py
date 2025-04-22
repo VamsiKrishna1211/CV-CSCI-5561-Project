@@ -31,14 +31,13 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
 )
 from lightning.pytorch.loggers import WandbLogger
-# from lightning.pytorch.loggers.tensorboard import TensorBoardLogger
 from tqdm import tqdm
 import requests
 from pathlib import Path
 
 # Parse command-line arguments
 def parse_args():
-    parser = argparse.ArgumentParser(description="Instance Segmentation with Mask R-CNN and SAM backbone using PyTorch Lightning")
+    parser = argparse.ArgumentParser(description="Instance Segmentation with Mask R-CNN and SAM backbone using PyTorch Lightning (Multi-GPU DDP)")
     parser.add_argument('--base-dir', type=str, default="/home/vamsik1211/Data/Assignments/Sem-2/CV/CourseProject/Instance_Segmentation Code CV Project/dataset/coco",
                         help="Base directory for COCO dataset")
     parser.add_argument('--train-ann', type=str, default="annotations/instances_train2017.json",
@@ -50,48 +49,45 @@ def parse_args():
     parser.add_argument('--num-epochs', type=int, default=10,
                         help="Number of training epochs")
     parser.add_argument('--batch-size', type=int, default=16,
-                        help="Batch size for data loaders")
+                        help="Per-GPU batch size for data loaders")
     parser.add_argument('--num-workers', type=int, default=16,
                         help="Number of workers for data loaders")
     parser.add_argument('--gradient-accumulation-steps', type=int, default=32,
                         help="Number of batches to accumulate gradients over")
     parser.add_argument('--learning-rate', type=float, default=0.005,
-                        help="Initial learning rate for SGD optimizer")
-    parser.add_argument('--momentum', type=float, default=0.9,
-                        help="Momentum for SGD optimizer")
+                        help="Initial learning rate for AdamW optimizer")
     parser.add_argument('--weight-decay', type=float, default=0.0005,
-                        help="Weight decay for SGD optimizer")
+                        help="Weight decay for AdamW optimizer")
     parser.add_argument('--target-size', type=int, nargs=2, default=(1024, 1024),
                         help="Target size for image resizing (height width)")
     parser.add_argument('--image-path', type=str, default="Picture3.png",
                         help="Path to the image for mask generation")
     parser.add_argument('--seed', type=int, default=42,
                         help="Random seed for reproducibility")
-    parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu",
-                        help="Device to use (cuda or cpu); defaults to cuda if available")
     parser.add_argument('--wandb-project', type=str, default="cv-course-project",
                         help="Weights and Biases project name")
-    parser.add_argument("--log_steps", type=int, default=5,)
-    parser.add_argument("--resume-ckpt-path", type=str, default=None, 
-                        help="The path for the checkpoint to resume at")
+    parser.add_argument("--log_steps", type=int, default=5,
+                        help="Logging interval in steps")
+    parser.add_argument("--resume-ckpt-path", type=str, default=None,
+                        help="Path for the checkpoint to resume from")
     parser.add_argument("--logs-dir", default="logs",
-                        help="Folder to save the running logs and weights etc stuff.")
-    parser.add_argument("--classfier-loss-weight", type=float, default=1,
-                        help="Classifer loss weight when calculating the combined loss")
+                        help="Folder to save logs, weights, etc.")
+    parser.add_argument("--classfier-loss-weight", type=float, default=1.0,
+                        help="Classifier loss weight in combined loss")
     parser.add_argument("--bbox-reg-loss-weight", type=float, default=1.0,
-                        help="Bounding Box regression loss weight")
+                        help="Bounding box regression loss weight")
     parser.add_argument("--mask-loss-weight", type=float, default=1.0,
                         help="Mask loss weight")
     parser.add_argument("--objectness-loss-weight", type=float, default=1.0,
                         help="Objectness loss weight")
     parser.add_argument("--rpn-bbox-reg-loss-weight", type=float, default=1.0,
-                        help="Region Proposan network bbox loss weight")
+                        help="Region Proposal Network bbox loss weight")
     return parser.parse_args()
 
 args = parse_args()
 args.logs_dir = Path(args.logs_dir)
 
-# Set random seed
+# Set random seed for reproducibility across all GPUs
 pl.seed_everything(args.seed, workers=True)
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
@@ -101,10 +97,7 @@ torch.backends.cudnn.enabled = True
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
-# Set device
-device = args.device if args.device else "cuda" if torch.cuda.is_available() else "cpu"
-
-# Set up console logging
+# Set up console logging (only rank 0 logs to console)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 console_logger = logging.getLogger(__name__)
 
@@ -120,7 +113,6 @@ loss_weights = {
 COCO_URLS = {
     "train2017": "http://images.cocodataset.org/zips/train2017.zip",
     "val2017": "http://images.cocodataset.org/zips/val2017.zip",
-    # "test2017": "http://images.cocodataset.org/zips/test2017.zip",
     "annotations": "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
 }
 
@@ -136,10 +128,10 @@ COCO_CLASSES = [
     "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
 ]
 
-# Utility functions for dataset download
+# Utility functions for dataset download (run only on rank 0)
 def download_file(url, dest_path):
     try:
-        console_logger.info(f"Starting download: {url} to {dest_path}")
+        console_logger.info(f"37;40;1mStarting download: {url} to {dest_path}")
         response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
@@ -176,7 +168,9 @@ def extract_zip(zip_path, extract_to):
         console_logger.error(f"Failed to extract or remove {zip_path}: {e}")
         raise
 
-def download_coco_dataset(base_dir):
+def download_coco_dataset(base_dir, rank=0):
+    if rank != 0:
+        return  # Only rank 0 downloads the dataset
     images_dir = os.path.join(base_dir, "images")
     annotations_dir = os.path.join(base_dir, "annotations")
     if not os.path.exists(base_dir):
@@ -188,7 +182,6 @@ def download_coco_dataset(base_dir):
     required_dirs = {
         "train2017": os.path.join(images_dir, "train2017"),
         "val2017": os.path.join(images_dir, "val2017"),
-        # "test2017": os.path.join(images_dir, "test2017"),
         "annotations": annotations_dir
     }
     all_complete = True
@@ -240,12 +233,10 @@ def freeze_model(model: torch.nn.Module):
 
 # PyTorch Lightning Module for Mask R-CNN
 class MaskRCNNLightning(pl.LightningModule):
-    def __init__(self, model_name=args.model_name, lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay):
+    def __init__(self, model_name=args.model_name, lr=args.learning_rate, weight_decay=args.weight_decay):
         super().__init__()
         self.lr = lr
-        self.momentum = momentum
         self.weight_decay = weight_decay
-
         self.save_hyperparameters()
         # Initialize backbone
         backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
@@ -290,6 +281,8 @@ class MaskRCNNLightning(pl.LightningModule):
             mask_head=mask_head,
             mask_predictor=mask_predictor
         )
+        # Synchronize batch normalization across GPUs
+        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def forward(self, images, targets=None):
         if self.training and targets is not None:
@@ -298,31 +291,23 @@ class MaskRCNNLightning(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         images, targets = batch
-        images = list(image.to(self.device) for image in images)
+        images = list(image for image in images)
         targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
         loss_dict = self.model(images, targets)
         losses = sum(loss * loss_weights[key] for key, loss in loss_dict.items())
-        
-
-        self.log('train/loss', losses.item(), prog_bar=True, on_step=True, on_epoch=True, logger=True)
-
+        self.log('train/loss', losses, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True)
         return losses
 
     def configure_optimizers(self):
-        # optimizer = torch.optim.SGD(
-        #     self.parameters(),
-        #     lr=self.lr,
-        #     momentum=self.momentum,
-        #     weight_decay=self.weight_decay
-        # )
         optimizer = torch.optim.AdamW(
             self.parameters(),
-            lr = self.lr,
-            weight_decay=args.weight_decay
+            lr=self.lr,
+            weight_decay=self.weight_decay
         )
-        # Calculate total steps accounting for gradient accumulation
+        # Calculate total steps accounting for gradient accumulation and multi-GPU
+        num_gpus = self.trainer.num_devices if hasattr(self.trainer, 'num_devices') else 1
         accumulate_grad_batches = self.trainer.accumulate_grad_batches
-        total_steps = (len(self.trainer.datamodule.train_dataloader()) // accumulate_grad_batches) * self.trainer.max_epochs
+        total_steps = (len(self.trainer.datamodule.train_dataloader()) // (accumulate_grad_batches * num_gpus)) * self.trainer.max_epochs
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=self.lr,
@@ -353,7 +338,7 @@ class COCODataModule(pl.LightningDataModule):
         self.target_size = tuple(args.target_size)
 
     def setup(self, stage=None):
-        download_coco_dataset(self.base_dir)
+        download_coco_dataset(self.base_dir, rank=self.global_rank)
         for path in [self.train_ann, self.val_ann]:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"Required dataset file/directory not found: {path}")
@@ -366,10 +351,11 @@ class COCODataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
-            shuffle=True,
+            shuffle=False,  # Shuffle handled by DistributedSampler in DDP
             num_workers=self.num_workers,
             collate_fn=collate_fn,
-            pin_memory=True
+            pin_memory=True,
+            sampler=torch.utils.data.distributed.DistributedSampler(self.train_dataset)
         )
 
     def val_dataloader(self):
@@ -476,8 +462,8 @@ def collate_fn(batch):
             processed_targets.append(target_dict)
     return images, processed_targets
 
-# Mask generation and visualization
-def generate_masks(model, image_path=args.image_path):
+# Mask generation and visualization (run only on rank 0)
+def generate_masks(model, image_path=args.image_path, device='cuda'):
     image = Image.open(image_path).convert("RGB")
     processed_image = resize_and_pad_image(image)
     img_array = np.array(processed_image).transpose(2, 0, 1)
@@ -489,12 +475,12 @@ def generate_masks(model, image_path=args.image_path):
     masks = predictions[0]['masks']
     scores = predictions[0]['scores']
     labels = predictions[0]['labels']
-    score_threshold = 0.1  # Hardcoded as in original code
+    score_threshold = 0.1
     valid_indices = scores > score_threshold
     valid_masks = masks[valid_indices]
     valid_scores = scores[valid_indices]
     valid_labels = labels[valid_indices]
-    binary_masks = (valid_masks > 0.1).squeeze(1).cpu().numpy()  # Hardcoded threshold as in original code
+    binary_masks = (valid_masks > 0.1).squeeze(1).cpu().numpy()
     return binary_masks, image, processed_image, {'scores': valid_scores, 'labels': valid_labels}
 
 if __name__ == "__main__":
@@ -505,21 +491,19 @@ if __name__ == "__main__":
     model = MaskRCNNLightning()
     
     # Set up callbacks
-    best_checkpoint_path = args.logs_dir / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth'
+    best_checkpoint_path = args.logs_dir / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}-{global_step}.pth'
     checkpoint_callback = ModelCheckpoint(
         monitor='train/loss',
         filename=str(best_checkpoint_path),
         save_top_k=4,
         mode='min',
-        # enable_version_counter=False,
     )
 
-    step_save_path = args.logs_dir / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}.pth'
+    step_save_path = args.logs_dir / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}-{global_step}.pth'
     step_checkpoint = ModelCheckpoint(
         filename=str(step_save_path),
         every_n_train_steps=20,
         save_on_train_epoch_end=True,
-        enable_version_counter=False
     )
     lr_monitor = LearningRateMonitor(logging_interval='step')
     early_stopping = EarlyStopping(
@@ -531,57 +515,54 @@ if __name__ == "__main__":
     
     # Set up W&B logger
     wandb_logger = WandbLogger(project=args.wandb_project, log_model="all")
-
     wandb_logger.watch(model)
-
-    # tensorboard_logger = TensorBoardLogger(
-    #     save_dir="logs",
-    #     name=args.wandb_project,        
-    # )
     
-    # Initialize trainer
+    # Initialize trainer for multi-GPU DDP
     trainer = pl.Trainer(
         max_epochs=args.num_epochs,
-        accelerator='gpu' if device == 'cuda' else 'cpu',
-        devices=1,
+        accelerator='gpu',
+        devices=-1,  # Use all available GPUs
+        strategy='ddp',  # Distributed Data Parallel
         callbacks=[checkpoint_callback, lr_monitor, early_stopping, step_checkpoint],
         logger=wandb_logger,
         accumulate_grad_batches=args.gradient_accumulation_steps,
         precision='bf16-mixed',
         log_every_n_steps=args.log_steps,
+        sync_batchnorm=True,  # Synchronize batch normalization across GPUs
     )
     
     # Train the model
     trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_ckpt_path)
     
-    # Generate and visualize masks
-    masks, original_image, processed_image, predictions = generate_masks(model)
-    
-    plt.figure(figsize=(15, 10))
-    plt.subplot(2, 2, 1)
-    plt.imshow(original_image)
-    plt.title("Original Image")
-    plt.subplot(2, 2, 2)
-    plt.imshow(processed_image)
-    plt.title("Processed Image (1024x1024)")
-    plt.subplot(2, 2, 3)
-    plt.imshow(processed_image)
-    colors = []
-    for i in range(len(masks)):
-        mask = masks[i]
-        color = np.random.rand(3)
-        colors.append(color)
-        masked_image = np.zeros_like(processed_image)
-        masked_image[mask > 0] = color * 255
-        plt.imshow(masked_image, alpha=0.5)
-    labels = predictions['labels'].cpu().numpy()
-    scores = predictions['scores'].cpu().numpy()
-    legend_elements = [Patch(color=colors[i], label=f"{COCO_CLASSES[labels[i]]} (Score: {scores[i]:.3f})") for i in range(len(masks))]
-    plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
-    plt.title("Masks Overlay")
-    if len(masks) > 0:
-        plt.subplot(2, 2, 4)
-        plt.imshow(masks[0], cmap='gray')
-        plt.title(f"First Mask ({COCO_CLASSES[labels[0]]}, Score: {scores[0]:.3f})")
-    plt.tight_layout()
-    plt.show()
+    # Generate and visualize masks (only on rank 0)
+    if trainer.global_rank == 0:
+        masks, original_image, processed_image, predictions = generate_masks(model, device='cuda')
+        
+        plt.figure(figsize=(15, 10))
+        plt.subplot(2, 2, 1)
+        plt.imshow(original_image)
+        plt.title("Original Image")
+        plt.subplot(2, 2, 2)
+        plt.imshow(processed_image)
+        plt.title("Processed Image (1024x1024)")
+        plt.subplot(2, 2, 3)
+        plt.imshow(processed_image)
+        colors = []
+        for i in range(len(masks)):
+            mask = masks[i]
+            color = np.random.rand(3)
+            colors.append(color)
+            masked_image = np.zeros_like(processed_image)
+            masked_image[mask > 0] = color * 255
+            plt.imshow(masked_image, alpha=0.5)
+        labels = predictions['labels'].cpu().numpy()
+        scores = predictions['scores'].cpu().numpy()
+        legend_elements = [Patch(color=colors[i], label=f"{COCO_CLASSES[labels[i]]} (Score: {scores[i]:.3f})") for i in range(len(masks))]
+        plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.15, 1))
+        plt.title("Masks Overlay")
+        if len(masks) > 0:
+            plt.subplot(2, 2, 4)
+            plt.imshow(masks[0], cmap='gray')
+            plt.title(f"First Mask ({COCO_CLASSES[labels[0]]}, Score: {scores[0]:.3f})")
+        plt.tight_layout()
+        plt.show()
