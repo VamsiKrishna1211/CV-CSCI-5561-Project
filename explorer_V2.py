@@ -1,39 +1,8 @@
-import logging
-import os
-import zipfile
-import argparse
-import numpy as np
-import torch
-import torchvision.transforms as T
-from PIL import Image
-from pycocotools import mask as coco_mask
-import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-from torch.utils.data import DataLoader
-from torchvision.datasets import CocoDetection
-from torchvision.models.detection import MaskRCNN
-from torchvision.models.detection.faster_rcnn import (
-    AnchorGenerator,
-    FastRCNNConvFCHead,
-    FastRCNNPredictor,
-)
-from torchvision.models.detection.mask_rcnn import (
-    MaskRCNNHeads,
-    MaskRCNNPredictor,
-    RPNHead,
-)
-from torchvision.ops import FeaturePyramidNetwork, MultiScaleRoIAlign
-from transformers import AutoModel
-import lightning as pl
-from lightning.pytorch.callbacks import (
-    EarlyStopping,
-    LearningRateMonitor,
-    ModelCheckpoint,
-)
-from lightning.pytorch.loggers import WandbLogger
-from tqdm import tqdm
-import requests
 from pathlib import Path
+import os
+import argparse
+
+
 
 # Parse command-line arguments
 def parse_args():
@@ -86,6 +55,41 @@ def parse_args():
 
 args = parse_args()
 args.logs_dir = Path(args.logs_dir)
+args.resume_ckpt_path = Path(args.resume_ckpt_path)
+
+import logging
+import zipfile
+import numpy as np
+import torch
+import torchvision.transforms as T
+from PIL import Image
+from pycocotools import mask as coco_mask
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from torch.utils.data import DataLoader
+from torchvision.datasets import CocoDetection
+from torchvision.models.detection import MaskRCNN
+from torchvision.models.detection.faster_rcnn import (
+    AnchorGenerator,
+    FastRCNNConvFCHead,
+    FastRCNNPredictor,
+)
+from torchvision.models.detection.mask_rcnn import (
+    MaskRCNNHeads,
+    MaskRCNNPredictor,
+    RPNHead,
+)
+from torchvision.ops import FeaturePyramidNetwork, MultiScaleRoIAlign
+from transformers import AutoModel
+import lightning as pl
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
+from lightning.pytorch.loggers import WandbLogger
+from tqdm import tqdm
+import requests
 
 # Set random seed for reproducibility across all GPUs
 pl.seed_everything(args.seed, workers=True)
@@ -541,7 +545,7 @@ if __name__ == "__main__":
     )
     
     # Train the model
-    trainer.fit(model, datamodule=data_module, ckpt_path=args.resume_ckpt_path)
+    trainer.fit(model, datamodule=data_module, ckpt_path=str(args.resume_ckpt_path))
     
     # Generate and visualize masks (only on rank 0)
     if trainer.global_rank == 0:
