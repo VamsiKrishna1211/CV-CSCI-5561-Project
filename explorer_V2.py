@@ -131,7 +131,7 @@ COCO_CLASSES = [
 # Utility functions for dataset download (run only on rank 0)
 def download_file(url, dest_path):
     try:
-        console_logger.info(f"37;40;1mStarting download: {url} to {dest_path}")
+        console_logger.info(f"Starting download: {url} to {dest_path}")
         response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
         total_size = int(response.headers.get('content-length', 0))
@@ -168,43 +168,52 @@ def extract_zip(zip_path, extract_to):
         console_logger.error(f"Failed to extract or remove {zip_path}: {e}")
         raise
 
-def download_coco_dataset(base_dir, rank=0):
-    if rank != 0:
-        return  # Only rank 0 downloads the dataset
-    images_dir = os.path.join(base_dir, "images")
-    annotations_dir = os.path.join(base_dir, "annotations")
-    if not os.path.exists(base_dir):
-        os.makedirs(images_dir)
-        os.makedirs(annotations_dir)
-        console_logger.info(f"Created directories: {images_dir}, {annotations_dir}")
-    else:
-        console_logger.info(f"Directory {base_dir} already exists. Checking contents...")
-    required_dirs = {
-        "train2017": os.path.join(images_dir, "train2017"),
-        "val2017": os.path.join(images_dir, "val2017"),
-        "annotations": annotations_dir
-    }
-    all_complete = True
-    for key, dir_path in required_dirs.items():
-        if not os.path.exists(dir_path) or not os.listdir(dir_path):
-            all_complete = False
-            console_logger.info(f"{key} missing or empty at {dir_path}")
-            break
+def download_coco_dataset(base_dir):
+    # Determine rank using torch.distributed (0 if not in DDP)
+    rank = 0
+    if torch.distributed.is_initialized():
+        rank = torch.distributed.get_rank()
+    
+    # Only rank 0 downloads the dataset
+    if rank == 0:
+        images_dir = os.path.join(base_dir, "images")
+        annotations_dir = os.path.join(base_dir, "annotations")
+        if not os.path.exists(base_dir):
+            os.makedirs(images_dir)
+            os.makedirs(annotations_dir)
+            console_logger.info(f"Created directories: {images_dir}, {annotations_dir}")
         else:
-            console_logger.info(f"{key} found at {dir_path} with {len(os.listdir(dir_path))} files")
-    if not all_complete:
-        for key, url in COCO_URLS.items():
-            dest_dir = annotations_dir if key == "annotations" else images_dir
-            zip_path = os.path.join(dest_dir, f"{key}.zip")
-            extracted_folder = os.path.join(dest_dir, key if key != "annotations" else "")
-            if os.path.exists(extracted_folder) and os.listdir(extracted_folder):
-                console_logger.info(f"{key} already downloaded and extracted to {extracted_folder}. Skipping...")
-                continue
-            download_file(url, zip_path)
-            extract_zip(zip_path, dest_dir)
-        console_logger.info(f"COCO 2017 dataset successfully downloaded and extracted to {base_dir}")
-    else:
-        console_logger.info("COCO 2017 dataset appears complete. Skipping download.")
+            console_logger.info(f"Directory {base_dir} already exists. Checking contents...")
+        required_dirs = {
+            "train2017": os.path.join(images_dir, "train2017"),
+            "val2017": os.path.join(images_dir, "val2017"),
+            "annotations": annotations_dir
+        }
+        all_complete = True
+        for key, dir_path in required_dirs.items():
+            if not os.path.exists(dir_path) or not os.listdir(dir_path):
+                all_complete = False
+                console_logger.info(f"{key} missing or empty at {dir_path}")
+                break
+            else:
+                console_logger.info(f"{key} found at {dir_path} with {len(os.listdir(dir_path))} files")
+        if not all_complete:
+            for key, url in COCO_URLS.items():
+                dest_dir = annotations_dir if key == "annotations" else images_dir
+                zip_path = os.path.join(dest_dir, f"{key}.zip")
+                extracted_folder = os.path.join(dest_dir, key if key != "annotations" else "")
+                if os.path.exists(extracted_folder) and os.listdir(extracted_folder):
+                    console_logger.info(f"{key} already downloaded and extracted to {extracted_folder}. Skipping...")
+                    continue
+                download_file(url, zip_path)
+                extract_zip(zip_path, dest_dir)
+            console_logger.info(f"COCO 2017 dataset successfully downloaded and extracted to {base_dir}")
+        else:
+            console_logger.info("COCO 2017 dataset appears complete. Skipping download.")
+    
+    # Synchronize processes to ensure download is complete before proceeding
+    if torch.distributed.is_initialized():
+        torch.distributed.barrier()
 
 # Model backbone
 class SamEmbeddingModelWithFPN(torch.nn.Module):
@@ -338,7 +347,7 @@ class COCODataModule(pl.LightningDataModule):
         self.target_size = tuple(args.target_size)
 
     def setup(self, stage=None):
-        download_coco_dataset(self.base_dir, rank=self.global_rank)
+        download_coco_dataset(self.base_dir)
         for path in [self.train_ann, self.val_ann]:
             if not os.path.exists(path):
                 raise FileNotFoundError(f"Required dataset file/directory not found: {path}")
