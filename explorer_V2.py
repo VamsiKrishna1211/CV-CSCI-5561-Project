@@ -23,7 +23,7 @@ def parse_args():
                         help="Number of workers for data loaders")
     parser.add_argument('--gradient-accumulation-steps', type=int, default=32,
                         help="Number of batches to accumulate gradients over")
-    parser.add_argument('--freeze-backbone', type=bool, default=False, action='store_true',
+    parser.add_argument('--freeze-backbone', default=False, action='store_true',
                         help="Stores false to freeze the backbone")
     parser.add_argument('--learning-rate', type=float, default=0.005,
                         help="Initial learning rate for AdamW optimizer")
