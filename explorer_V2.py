@@ -23,6 +23,8 @@ def parse_args():
                         help="Number of workers for data loaders")
     parser.add_argument('--gradient-accumulation-steps', type=int, default=32,
                         help="Number of batches to accumulate gradients over")
+    parser.add_argument('--freeze-backbone', type=bool, default=False, action='store_true',
+                        help="Stores false to freeze the backbone")
     parser.add_argument('--learning-rate', type=float, default=0.005,
                         help="Initial learning rate for AdamW optimizer")
     parser.add_argument('--weight-decay', type=float, default=0.0005,
@@ -253,7 +255,8 @@ class MaskRCNNLightning(pl.LightningModule):
         self.save_hyperparameters()
         # Initialize backbone
         backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
-        freeze_model(backbone)
+        if args.freeze_backbone:
+            freeze_model(backbone)
         # Initialize Mask R-CNN components
         anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
         roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=7, sampling_ratio=2)
