@@ -552,7 +552,11 @@ if __name__ == "__main__":
         accelerator='gpu',
         devices=-1,  # Use all available GPUs
         strategy='ddp',  # Distributed Data Parallel
-        callbacks=[checkpoint_callback, lr_monitor, early_stopping, step_checkpoint],
+        callbacks=[checkpoint_callback, 
+                   lr_monitor, 
+                   early_stopping, 
+                #    step_checkpoint,
+                   ],
         logger=wandb_logger,
         accumulate_grad_batches=args.gradient_accumulation_steps,
         precision='bf16-mixed',
