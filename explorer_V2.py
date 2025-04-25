@@ -563,7 +563,10 @@ if __name__ == "__main__":
         
     
     # Train the model
-    trainer.fit(model, datamodule=data_module, ckpt_path=str(args.resume_ckpt_path))
+    trainer.fit(model=model, 
+                datamodule=data_module, 
+                ckpt_path= None if args.resume_ckpt_path is None else str(args.resume_ckpt_path)
+                )
     
     # Generate and visualize masks (only on rank 0)
     if trainer.global_rank == 0:
