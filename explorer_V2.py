@@ -41,6 +41,8 @@ def parse_args():
                         help="Logging interval in steps")
     parser.add_argument("--resume-ckpt-path", type=str, default=None,
                         help="Path for the checkpoint to resume from")
+    parser.add_argument("--load-model-weights", type=str, default=None,
+                        help="Path to load only weights")
     parser.add_argument("--logs-dir", default="logs",
                         help="Folder to save logs, weights, etc.")
     parser.add_argument("--classfier-loss-weight", type=float, default=1.0,
@@ -58,6 +60,9 @@ def parse_args():
 args = parse_args()
 args.logs_dir = Path(args.logs_dir)
 args.resume_ckpt_path = Path(args.resume_ckpt_path)
+
+if args.resume_ckpt_path is not None and args.load_model_weights is not None:
+    print("Error: Both resume_ckpt_path and load_model_weights cannot be set!")
 
 import logging
 import zipfile
@@ -227,6 +232,8 @@ class SamEmbeddingModelWithFPN(torch.nn.Module):
         super().__init__()
         model = AutoModel.from_pretrained(model_name)
         self.model = model.vision_encoder
+        if args.freeze_backbone:
+            freeze_model(self.model)
         self.out_channels = 256
         self.fpn = FeaturePyramidNetwork(
             in_channels_list=[256],
@@ -255,8 +262,8 @@ class MaskRCNNLightning(pl.LightningModule):
         self.save_hyperparameters()
         # Initialize backbone
         backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
-        if args.freeze_backbone:
-            freeze_model(backbone)
+        # if args.freeze_backbone:
+        #     freeze_model(backbone)
         # Initialize Mask R-CNN components
         anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
         roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=7, sampling_ratio=2)
@@ -505,6 +512,9 @@ if __name__ == "__main__":
     
     # Initialize model
     model = MaskRCNNLightning()
+
+    if args.load_model_weights is not None:
+        model.load_state_dict(torch.load(str(args.load_model_weights)))
     
     # Set up callbacks
     best_checkpoint_path = args.logs_dir / "checkpoints" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}-{global_step}.pth'
@@ -546,6 +556,8 @@ if __name__ == "__main__":
         log_every_n_steps=args.log_steps,
         sync_batchnorm=True,  # Synchronize batch normalization across GPUs
     )
+
+        
     
     # Train the model
     trainer.fit(model, datamodule=data_module, ckpt_path=str(args.resume_ckpt_path))
