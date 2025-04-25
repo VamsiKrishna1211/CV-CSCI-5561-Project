@@ -59,10 +59,13 @@ def parse_args():
 
 args = parse_args()
 args.logs_dir = Path(args.logs_dir)
-args.resume_ckpt_path = Path(args.resume_ckpt_path)
-
 if args.resume_ckpt_path is not None and args.load_model_weights is not None:
     print("Error: Both resume_ckpt_path and load_model_weights cannot be set!")
+elif args.resume_ckpt_path is not None:
+    args.resume_ckpt_path = Path(args.resume_ckpt_path)
+elif args.load_model_weights is not None:
+    args.load_model_weights = Path(args.load_model_weights)
+
 
 import logging
 import zipfile
