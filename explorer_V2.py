@@ -333,7 +333,7 @@ class MaskRCNNLightning(pl.LightningModule):
         # Calculate total steps accounting for gradient accumulation and multi-GPU
         num_gpus = self.trainer.num_devices if hasattr(self.trainer, 'num_devices') else 1
         accumulate_grad_batches = self.trainer.accumulate_grad_batches
-        total_steps = (len(self.trainer.datamodule.train_dataloader()) // (num_gpus)) * self.trainer.max_epochs
+        total_steps = (len(self.trainer.datamodule.train_dataloader())) * self.trainer.max_epochs
 
         print(f"[INFO]: Number of steps calculated {total_steps}")
 
