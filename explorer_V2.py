@@ -55,6 +55,8 @@ def parse_args():
                         help="Objectness loss weight")
     parser.add_argument("--rpn-bbox-reg-loss-weight", type=float, default=1.0,
                         help="Region Proposal Network bbox loss weight")
+    parser.add_argument("--one-cycle-lr-pct", type=float, default=0.1,
+                        help="Percentage of steps when to start the lr decent.")
     return parser.parse_args()
 
 args = parse_args()
@@ -65,6 +67,10 @@ elif args.resume_ckpt_path is not None:
     args.resume_ckpt_path = Path(args.resume_ckpt_path)
 elif args.load_model_weights is not None:
     args.load_model_weights = Path(args.load_model_weights)
+
+if not 0 < args.one_cycle_lr_pct < 1:
+    print("Value should be between 0 and 1")
+
 
 
 import logging
@@ -341,7 +347,7 @@ class MaskRCNNLightning(pl.LightningModule):
             optimizer,
             max_lr=self.lr,
             total_steps=total_steps,
-            pct_start=0.3,
+            pct_start=args.one_cycle_lr_pct,
             final_div_factor=1e5,
         )
         return {
@@ -544,6 +550,7 @@ if __name__ == "__main__":
         filename=str(best_checkpoint_path),
         save_top_k=4,
         mode='min',
+        save_on_train_epoch_end=True,
     )
 
     step_save_path = args.logs_dir / "interval_checkpoint" / 'maskrcnn-{epoch:02d}-{train/loss:.4f}-{global_step}.pth'
@@ -552,13 +559,15 @@ if __name__ == "__main__":
         every_n_train_steps=20,
         save_on_train_epoch_end=True,
     )
+
     lr_monitor = LearningRateMonitor(logging_interval='step')
+
     early_stopping = EarlyStopping(
-        monitor='train/loss',
-        patience=3,
-        mode='min',
-        min_delta=1e-5
-    )
+    monitor='train/loss',
+    patience=50,  # Large patience to avoid early stopping
+    mode='min',
+    min_delta=1e-5
+)
     
     # Set up W&B logger
     wandb_logger = WandbLogger(project=args.wandb_project, log_model="all")
@@ -572,7 +581,7 @@ if __name__ == "__main__":
         strategy='ddp',  # Distributed Data Parallel
         callbacks=[checkpoint_callback, 
                    lr_monitor, 
-                   early_stopping, 
+                #    early_stopping, 
                 #    step_checkpoint,
                    ],
         logger=wandb_logger,
