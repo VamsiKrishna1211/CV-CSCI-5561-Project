@@ -333,7 +333,10 @@ class MaskRCNNLightning(pl.LightningModule):
         # Calculate total steps accounting for gradient accumulation and multi-GPU
         num_gpus = self.trainer.num_devices if hasattr(self.trainer, 'num_devices') else 1
         accumulate_grad_batches = self.trainer.accumulate_grad_batches
-        total_steps = (len(self.trainer.datamodule.train_dataloader()) // (accumulate_grad_batches * num_gpus)) * self.trainer.max_epochs
+        total_steps = (len(self.trainer.datamodule.train_dataloader()) // (num_gpus)) * self.trainer.max_epochs
+
+        print(f"[INFO]: Number of steps calculated {total_steps}")
+
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=self.lr,
@@ -350,28 +353,42 @@ class MaskRCNNLightning(pl.LightningModule):
             }
         }
 
-# PyTorch Lightning DataModule for COCO
+def prepare_coco_datasets(args):
+    """Prepare COCO datasets with paths and transformations."""
+    base_dir = args.base_dir
+    train_dir = os.path.join(base_dir, "images/train2017")
+    val_dir = os.path.join(base_dir, "images/val2017")
+    train_ann = os.path.join(base_dir, args.train_ann)
+    val_ann = os.path.join(base_dir, args.val_ann)
+    
+    # Download dataset if needed
+    download_coco_dataset(base_dir)
+    
+    # Verify annotation files exist
+    for path in [train_ann, val_ann]:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Required dataset file/directory not found: {path}")
+        console_logger.info(f"Verified existence of {path}")
+    
+    # Define transformations
+    transform = T.Compose([
+        ResizeAndPad(target_size=tuple(args.target_size)),
+        T.ToTensor()
+    ])
+    
+    # Create datasets
+    train_dataset = CocoDetection(root=train_dir, annFile=train_ann, transform=transform)
+    val_dataset = CocoDetection(root=val_dir, annFile=val_ann, transform=transform)
+    
+    return train_dataset, val_dataset
+
 class COCODataModule(pl.LightningDataModule):
-    def __init__(self):
+    def __init__(self, train_dataset, val_dataset):
         super().__init__()
-        self.base_dir = args.base_dir
-        self.train_dir = os.path.join(self.base_dir, "images/train2017")
-        self.val_dir = os.path.join(self.base_dir, "images/val2017")
-        self.train_ann = os.path.join(self.base_dir, args.train_ann)
-        self.val_ann = os.path.join(self.base_dir, args.val_ann)
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
         self.batch_size = args.batch_size
         self.num_workers = args.num_workers
-        self.target_size = tuple(args.target_size)
-
-    def setup(self, stage=None):
-        download_coco_dataset(self.base_dir)
-        for path in [self.train_ann, self.val_ann]:
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"Required dataset file/directory not found: {path}")
-            console_logger.info(f"Verified existence of {path}")
-        transform = T.Compose([ResizeAndPad(target_size=self.target_size), T.ToTensor()])
-        self.train_dataset = CocoDetection(root=self.train_dir, annFile=self.train_ann, transform=transform)
-        self.val_dataset = CocoDetection(root=self.val_dir, annFile=self.val_ann, transform=transform)
 
     def train_dataloader(self):
         return DataLoader(
@@ -511,7 +528,8 @@ def generate_masks(model, image_path=args.image_path, device='cuda'):
 
 if __name__ == "__main__":
     # Initialize data module
-    data_module = COCODataModule()
+    train_dataset, val_dataset = prepare_coco_datasets(args)
+    data_module = COCODataModule(train_dataset, val_dataset)
     
     # Initialize model
     model = MaskRCNNLightning()
