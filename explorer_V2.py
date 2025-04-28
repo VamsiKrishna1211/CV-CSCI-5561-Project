@@ -57,6 +57,8 @@ def parse_args():
                         help="Region Proposal Network bbox loss weight")
     parser.add_argument("--one-cycle-lr-pct", type=float, default=0.1,
                         help="Percentage of steps when to start the lr decent.")
+    parser.add_argument("--one-cycle-lr-three-phase", action="store_true", default=False,
+                        help="Use this flag to enable three phase one cycle lr")
     return parser.parse_args()
 
 args = parse_args()
@@ -349,6 +351,7 @@ class MaskRCNNLightning(pl.LightningModule):
             total_steps=total_steps,
             pct_start=args.one_cycle_lr_pct,
             final_div_factor=1e5,
+            three_phase=args.one_cycle_lr_three_phase
         )
         return {
             "optimizer": optimizer,
