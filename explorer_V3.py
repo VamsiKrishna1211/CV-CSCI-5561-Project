@@ -48,6 +48,11 @@ try:
 except ImportError:
     print("Error: PyTorch Lightning (lightning) not found. Please install it: pip install lightning")
     exit(1)
+try:
+    import wandb
+except ImportError:
+    print("Error: wandb not found. Please install it: pip install wandb")
+    exit(1)
 from tqdm import tqdm
 import requests
 import torch.distributed
@@ -343,8 +348,6 @@ class MaskRCNNLightning(pl.LightningModule):
         self.save_hyperparameters()
         # Initialize backbone
         backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
-        # if args.freeze_backbone:
-        #     freeze_model(backbone)
         # Initialize Mask R-CNN components
         anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
         roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=7, sampling_ratio=2)
@@ -400,6 +403,8 @@ class MaskRCNNLightning(pl.LightningModule):
         loss_dict = self.model(images, targets)
         losses = sum(loss * loss_weights[key] for key, loss in loss_dict.items())
         self.log('train/loss', losses, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True)
+        for key, loss in loss_dict.items():
+            self.log(f'train/{key}', loss, on_step=True, on_epoch=True, logger=True, sync_dist=True)
         return losses
 
     def configure_optimizers(self):
@@ -412,9 +417,7 @@ class MaskRCNNLightning(pl.LightningModule):
         num_gpus = self.trainer.num_devices if hasattr(self.trainer, 'num_devices') else 1
         accumulate_grad_batches = self.trainer.accumulate_grad_batches
         total_steps = (len(self.trainer.datamodule.train_dataloader())) * self.trainer.max_epochs
-
-        print(f"[INFO]: Number of steps calculated {total_steps}")
-
+        console_logger.info(f"Number of steps calculated: {total_steps}")
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=self.lr,
@@ -770,15 +773,16 @@ if __name__ == "__main__":
         chkpt_cb = ModelCheckpoint(monitor='train/loss', dirpath=checkpoint_dir, filename='best-{epoch:02d}-{train/loss:.4f}', save_top_k=3, mode='min', save_last=True)
         lr_mon = LearningRateMonitor(logging_interval='step')
         callbacks = [chkpt_cb, lr_mon]
-        logger = True
+        wandb_logger = None
         try:
-             if args.wandb_project:
-                 logger = WandbLogger(project=args.wandb_project, log_model="all", save_dir=str(args.logs_dir))
-                 console_logger.info(f"Using WandB logger for project: {args.wandb_project}")
-        except Exception as e: console_logger.warning(f"WandB setup failed: {e}. Using default logger.")
+            if args.wandb_project:
+                wandb_logger = WandbLogger(project=args.wandb_project, log_model="all", save_dir=str(args.logs_dir), config=vars(args))
+                console_logger.info(f"Initialized WandB logger for project: {args.wandb_project}")
+                wandb_logger.watch(model, log="gradients", log_freq=100)
+        except Exception as e: console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
         trainer = pl.Trainer(
             max_epochs=args.num_epochs, accelerator='gpu', devices=-1,
-            strategy='ddp_find_unused_parameters_true', callbacks=callbacks, logger=logger,
+            strategy='ddp_find_unused_parameters_true', callbacks=callbacks, logger=wandb_logger if wandb_logger else True,
             accumulate_grad_batches=args.gradient_accumulation_steps, precision='bf16-mixed',
             log_every_n_steps=args.log_steps, sync_batchnorm=True,
         )
