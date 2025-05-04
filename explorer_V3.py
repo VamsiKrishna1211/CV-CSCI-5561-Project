@@ -751,47 +751,72 @@ if __name__ == "__main__":
         model = MaskRCNNLightning(model_name=args.model_name, lr=args.learning_rate, weight_decay=args.weight_decay)
         console_logger.info(f"Model '{args.model_name}' initialized.")
     except Exception as e:
-         console_logger.error(f"Failed to initialize model: {e}", exc_info=True)
-         exit(1)
+        console_logger.error(f"Failed to initialize model: {e}", exc_info=True)
+        exit(1)
     if args.num_epochs > 0 and data_module is not None:
         console_logger.info("--- Starting Training Phase ---")
         ckpt_path_for_fit = None
         if args.resume_ckpt_path and args.resume_ckpt_path.is_file():
-             ckpt_path_for_fit = str(args.resume_ckpt_path)
-             console_logger.info(f"Training will resume from checkpoint: {ckpt_path_for_fit}")
+            ckpt_path_for_fit = str(args.resume_ckpt_path)
+            console_logger.info(f"Training will resume from checkpoint: {ckpt_path_for_fit}")
         elif args.load_model_weights and args.load_model_weights.is_file():
             console_logger.info(f"Loading weights for training from: {args.load_model_weights}")
             try:
                 checkpoint = torch.load(str(args.load_model_weights), map_location='cpu')
-                if 'state_dict' in checkpoint: model.load_state_dict(checkpoint['state_dict'], strict=False)
-                else: model.model.load_state_dict(checkpoint, strict=False)
+                if 'state_dict' in checkpoint: 
+                    model.load_state_dict(checkpoint['state_dict'], strict=False)
+                else: 
+                    model.model.load_state_dict(checkpoint, strict=False)
                 console_logger.info("Weights loaded successfully.")
-            except Exception as e: console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
+            except Exception as e: 
+                console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
         args.logs_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_dir = args.logs_dir / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        chkpt_cb = ModelCheckpoint(monitor='train/loss', dirpath=checkpoint_dir, filename='best-{epoch:02d}-{train/loss:.4f}', save_top_k=3, mode='min', save_last=True)
+        chkpt_cb = ModelCheckpoint(
+            monitor='train/loss', 
+            dirpath=checkpoint_dir, 
+            filename='best-{epoch:02d}-{train/loss:.4f}', 
+            save_top_k=3, 
+            mode='min', 
+            save_last=True
+        )
         lr_mon = LearningRateMonitor(logging_interval='step')
         callbacks = [chkpt_cb, lr_mon]
         wandb_logger = None
         try:
             if args.wandb_project:
-                wandb_logger = WandbLogger(project=args.wandb_project, log_model="all", save_dir=str(args.logs_dir), config=vars(args))
+                wandb_logger = WandbLogger(
+                    project=args.wandb_project, 
+                    log_model="all", 
+                    save_dir=str(args.logs_dir),
+                    config=vars(args)
+                )
                 console_logger.info(f"Initialized WandB logger for project: {args.wandb_project}")
-                wandb_logger.watch(model, log="gradients", log_freq=100)
-        except Exception as e: console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
+                # Watch the underlying Mask R-CNN model for gradients
+                wandb_logger.watch(model.model, log="gradients", log_freq=10)
+                console_logger.info("W&B watching model.model for gradient histograms")
+        except Exception as e:
+            console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
+            wandb_logger = None
         trainer = pl.Trainer(
-            max_epochs=args.num_epochs, accelerator='gpu', devices=-1,
-            strategy='ddp_find_unused_parameters_true', callbacks=callbacks, logger=wandb_logger if wandb_logger else True,
-            accumulate_grad_batches=args.gradient_accumulation_steps, precision='bf16-mixed',
-            log_every_n_steps=args.log_steps, sync_batchnorm=True,
+            max_epochs=args.num_epochs, 
+            accelerator='gpu', 
+            devices=-1,
+            strategy='ddp_find_unused_parameters_true', 
+            callbacks=callbacks, 
+            logger=wandb_logger if wandb_logger else True,
+            accumulate_grad_batches=args.gradient_accumulation_steps, 
+            precision='bf16-mixed',
+            log_every_n_steps=args.log_steps, 
+            sync_batchnorm=True,
         )
         if trainer.is_global_zero:
-             num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-             console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
-             if hasattr(torch.cuda, 'mem_get_info') and torch.cuda.is_available():
-                 free, total = torch.cuda.mem_get_info()
-                 console_logger.info(f"GPU Memory (Rank 0): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
+            num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
+            if hasattr(torch.cuda, 'mem_get_info') and torch.cuda.is_available():
+                free, total = torch.cuda.mem_get_info()
+                console_logger.info(f"GPU Memory (Rank 0): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
         try:
             console_logger.info(f"Starting training...")
             trainer.fit(model=model, datamodule=data_module, ckpt_path=ckpt_path_for_fit)
@@ -801,10 +826,10 @@ if __name__ == "__main__":
             console_logger.error(f"Training failed: {e}", exc_info=True)
             exit(1)
     elif args.num_epochs <= 0:
-         console_logger.info("Skipping training phase (num_epochs <= 0).")
+        console_logger.info("Skipping training phase (num_epochs <= 0).")
     else:
-         console_logger.error("Cannot train because DataModule initialization failed.")
-         exit(1)
+        console_logger.error("Cannot train because DataModule initialization failed.")
+        exit(1)
     run_inference = args.image_path or args.input_dir or args.video_path
     is_rank_zero = torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True
     if run_inference and is_rank_zero:
