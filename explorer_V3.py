@@ -362,6 +362,7 @@ class SamEmbeddingModelWithFPN(torch.nn.Module):
 
      # Inside the SamEmbeddingModelWithFPN class:
     def forward(self, inputs):
+        # --- Input Validation ---
         if isinstance(inputs, dict):
             pixel_values = inputs.get("pixel_values")
             if pixel_values is None: raise ValueError("Input dict needs 'pixel_values'")
@@ -369,10 +370,23 @@ class SamEmbeddingModelWithFPN(torch.nn.Module):
         elif not isinstance(inputs, torch.Tensor):
             raise TypeError(f"Input must be Tensor or dict with 'pixel_values'. Got {type(inputs)}")
 
-        # SAM Vision Encoder Forward Pass
+        # --- ADDED: Handle 3D input by adding a batch dimension ---
+        is_3d_input = False # Keep track if the original input was 3D
+        if inputs.ndim == 3:
+            console_logger.debug(f"Received 3D input ({inputs.shape}). Unsqueezing to add batch dimension.")
+            inputs = inputs.unsqueeze(0) # Add batch dimension: [C, H, W] -> [1, C, H, W]
+            is_3d_input = True
+        elif inputs.ndim != 4:
+            # If you want to strictly enforce 3D or 4D input:
+            raise ValueError(f"Input tensor must be 3D or 4D. Got {inputs.ndim} dimensions. Shape: {inputs.shape}")
+        # Now 'inputs' is guaranteed to be 4D: [B, C, H, W] (where B=1 if original was 3D)
+        # --- END ADDED SECTION ---
+
+        # --- SAM Vision Encoder Forward Pass ---
+        # The self.model receives a 4D tensor
         encoder_output = self.model(inputs, output_hidden_states=False)
 
-        # Extract the primary feature map
+        # --- Extract the primary feature map ---
         if hasattr(encoder_output, 'last_hidden_state'):
             features = encoder_output.last_hidden_state
         elif isinstance(encoder_output, torch.Tensor):
@@ -380,32 +394,28 @@ class SamEmbeddingModelWithFPN(torch.nn.Module):
         else:
             raise TypeError(f"Unexpected output type from vision encoder: {type(encoder_output)}")
 
-        console_logger.debug(f"Features shape from vision encoder: {features.shape}")
+        console_logger.debug(f"Features shape from vision encoder: {features.shape}") # Will have B=1
 
         # --- Determine feature map shape and prepare for FPN ---
+        # This part of the code expects features with a batch dimension (B)
         if features.ndim == 4:
-            # Shape is likely [B, C, H, W] - Already spatial
             console_logger.debug("Features appear to be in [B, C, H, W] format.")
-            # Directly use these features if channel count matches FPN input expectations
-            features_reshaped = features
+            features_reshaped = features # B will be 1 if input was 3D
         elif features.ndim == 3:
-            # Shape is likely [B, N, C] - Need to reshape to spatial [B, C, H, W]
             console_logger.debug("Features appear to be in [B, N, C] format. Reshaping...")
-            B, N, C = features.shape # This was the line causing the error before the ndim check
+            B, N, C = features.shape # B will be 1 if input was 3D
 
-            # Infer H, W of the feature grid from input image size and patch size
+            # Infer H, W using the (potentially unsqueezed) 4D input tensor shape
             H_in, W_in = inputs.shape[-2], inputs.shape[-1]
             expected_H, expected_W = H_in // self.patch_size, W_in // self.patch_size
 
             # Verify patch count N matches expected grid size
             if N != expected_H * expected_W:
-                # Fallback check: Maybe it's a square grid inferred differently?
                 H_W_sqrt = int(N**0.5)
                 if H_W_sqrt * H_W_sqrt == N:
                     expected_H, expected_W = H_W_sqrt, H_W_sqrt
                     console_logger.warning(f"Inferred square feature grid H=W={H_W_sqrt} from patch count {N}. Input image size was {H_in}x{W_in}.")
                 else:
-                    # If neither matches, raise error
                     raise ValueError(
                         f"Patch count {N} from vision encoder doesn't match expected grid size "
                         f"{expected_H}x{expected_W} (derived from input {H_in}x{W_in} and patch size {self.patch_size}). "
@@ -414,19 +424,15 @@ class SamEmbeddingModelWithFPN(torch.nn.Module):
 
             # Reshape: [B, N, C] -> [B, H, W, C] -> [B, C, H, W]
             try:
-                features_reshaped = features.view(B, expected_H, expected_W, C).permute(0, 3, 1, 2)
+                features_reshaped = features.view(B, expected_H, expected_W, C).permute(0, 3, 1, 2) # B=1
                 console_logger.debug(f"Reshaped features to: {features_reshaped.shape}")
             except Exception as e:
-                 console_logger.error(f"Failed to reshape features from {features.shape} to spatial format: {e}", exc_info=True)
-                 raise e
-
+                console_logger.error(f"Failed to reshape features from {features.shape} to spatial format: {e}", exc_info=True)
+                raise e
         else:
-            # Handle unexpected number of dimensions
             raise ValueError(f"Unexpected number of dimensions in features tensor: {features.ndim}. Shape: {features.shape}")
 
         # --- Prepare Input for FPN ---
-        # FPN expects a dictionary. Use '0' as key, assuming FPN takes it as the first input level.
-        # Ensure the channel dimension (C) of the features matches what FPN expects.
         fpn_expected_channels = self.fpn.in_channels_list[0]
         feature_channels = features_reshaped.shape[1]
         if feature_channels != fpn_expected_channels:
@@ -436,12 +442,24 @@ class SamEmbeddingModelWithFPN(torch.nn.Module):
                 f"Check model configuration."
             )
 
-        features_for_fpn = {'0': features_reshaped}
+        features_for_fpn = {'0': features_reshaped} # features_reshaped is [1, C, H, W]
 
         # --- FPN Forward Pass ---
-        fpn_output = self.fpn(features_for_fpn)
-        # console_logger.debug(f"FPN output keys: {fpn_output.keys()}") # Uncomment to verify keys if needed
+        fpn_output = self.fpn(features_for_fpn) # Output will likely have B=1
 
+        # --- Optional: Remove batch dimension from output if input was 3D ---
+        # Note: fpn_output is often a dictionary of tensors from different FPN levels.
+        # You might need to squeeze the batch dimension from each tensor in the output dict.
+        # if is_3d_input and isinstance(fpn_output, dict):
+        #     squeezed_output = {k: v.squeeze(0) for k, v in fpn_output.items()}
+        #     return squeezed_output
+        # elif is_3d_input and isinstance(fpn_output, torch.Tensor):
+        #      return fpn_output.squeeze(0)
+        # else: # Return the potentially 4D output if input was 4D
+        #      return fpn_output
+        # --- END Optional Section ---
+
+        # Return the FPN output (will likely have a batch dimension of 1 if input was 3D)
         return fpn_output
 
 
