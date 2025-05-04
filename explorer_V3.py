@@ -16,6 +16,11 @@ except ImportError:
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from torch.utils.data import DataLoader
+from torchvision.models.detection.faster_rcnn import (
+    AnchorGenerator,
+    FastRCNNConvFCHead,
+    FastRCNNPredictor,
+)
 try:
     from torchvision.datasets import CocoDetection
     from torchvision.models.detection import MaskRCNN
@@ -335,99 +340,97 @@ class MaskRCNNLightning(pl.LightningModule):
         super().__init__()
         self.lr = lr
         self.weight_decay = weight_decay
-        self.save_hyperparameters(ignore=['model_name'])
-        backbone = SamEmbeddingModelWithFPN(model_name=model_name)
-        backbone_out_channels = backbone.out_channels
-        fpn_featmap_names = ['0', '1', '2', '3']
-        anchor_sizes = ((32,), (64,), (128,), (256,))  # Match 4 feature maps
-        aspect_ratios = ((0.5, 1.0, 2.0),) * len(anchor_sizes)  # Aspect ratios for 4 feature maps
-        anchor_generator = AnchorGenerator(sizes=anchor_sizes, aspect_ratios=aspect_ratios)
-        rpn_head = RPNHead(backbone_out_channels, anchor_generator.num_anchors_per_location()[0])
-        box_roi_pooler = MultiScaleRoIAlign(featmap_names=fpn_featmap_names, output_size=7, sampling_ratio=2)
-        mask_roi_pooler = MultiScaleRoIAlign(featmap_names=fpn_featmap_names, output_size=14, sampling_ratio=2)
-        resolution = box_roi_pooler.output_size[0]
-        representation_size = 1024
-        box_head_input_features = backbone_out_channels * resolution ** 2
-        box_head_fc = torch.nn.Linear(box_head_input_features, representation_size)
-        box_head = torch.nn.Sequential(torch.nn.Flatten(start_dim=1), box_head_fc, torch.nn.ReLU())
-        box_predictor = FastRCNNPredictor(representation_size, len(COCO_CLASSES))
-        mask_layers = (256, 256, 256, 256)
-        mask_dilation = 1
-        mask_head = MaskRCNNHeads(backbone_out_channels, mask_layers, mask_dilation)
-        mask_predictor = MaskRCNNPredictor(mask_layers[-1], mask_layers[-1], len(COCO_CLASSES))
+        self.save_hyperparameters()
+        # Initialize backbone
+        backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
+        # if args.freeze_backbone:
+        #     freeze_model(backbone)
+        # Initialize Mask R-CNN components
+        anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
+        roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=7, sampling_ratio=2)
+        mask_roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=14, sampling_ratio=2)
+        box_head = FastRCNNConvFCHead((backbone.out_channels, 7, 7), [256, 256, 256, 256], [1024], norm_layer=torch.nn.BatchNorm2d)
+        mask_head = MaskRCNNHeads(backbone.out_channels, [256, 256, 256, 256], 1, norm_layer=torch.nn.BatchNorm2d)
+        box_predictor = FastRCNNPredictor(in_channels=1024, num_classes=91)
+        rpn_head = RPNHead(backbone.out_channels, anchor_generator.num_anchors_per_location()[0], conv_depth=2)
+        mask_predictor = MaskRCNNPredictor(in_channels=256, dim_reduced=256, num_classes=91)
+        # Initialize Mask R-CNN
         self.model = MaskRCNN(
-            backbone, num_classes=None,
-            rpn_anchor_generator=anchor_generator, rpn_head=rpn_head,
-            box_roi_pool=box_roi_pooler, box_head=box_head, box_predictor=box_predictor,
-            mask_roi_pool=mask_roi_pooler, mask_head=mask_head, mask_predictor=mask_predictor,
-            min_size=int(min(args.target_size)),
-            max_size=int(max(args.target_size)),
+            backbone=backbone,
+            num_classes=None,
+            min_size=args.target_size[0],
+            max_size=args.target_size[1],
+            rpn_anchor_generator=anchor_generator,
+            rpn_head=rpn_head,
+            rpn_pre_nms_top_n_train=3000,
+            rpn_pre_nms_top_n_test=3000,
+            rpn_post_nms_top_n_train=3000,
+            rpn_post_nms_top_n_test=3000,
+            rpn_nms_thresh=0.7,
+            rpn_fg_iou_thresh=0.7,
+            rpn_bg_iou_thresh=0.3,
+            rpn_batch_size_per_image=1024,
+            rpn_positive_fraction=0.5,
+            box_roi_pool=roi_pooler,
+            box_head=box_head,
+            box_predictor=box_predictor,
+            box_score_thresh=0.05,
+            box_nms_thresh=0.5,
+            box_detections_per_img=3000,
+            box_fg_iou_thresh=0.5,
+            box_bg_iou_thresh=0.5,
+            box_batch_size_per_image=512,
+            box_positive_fraction=0.25,
+            mask_roi_pool=mask_roi_pooler,
+            mask_head=mask_head,
+            mask_predictor=mask_predictor
         )
-        if torch.distributed.is_initialized() and torch.distributed.is_available():
-            self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
-            console_logger.info("Converted BatchNorm to SyncBatchNorm for DDP.")
+        # Synchronize batch normalization across GPUs
+        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def forward(self, images, targets=None):
-        if self.training and targets is None:
-            console_logger.warning("Targets are None during training step.")
-        return self.model(images, targets)
+        if self.training and targets is not None:
+            return self.model(images, targets)
+        return self.model(images)
 
     def training_step(self, batch, batch_idx):
-        if batch is None or len(batch) != 2:
-            console_logger.warning(f"Training step {batch_idx}: Received invalid batch format. Skipping.")
-            return None
         images, targets = batch
-        if images is None or targets is None:
-            console_logger.warning(f"Training step {batch_idx}: Received None in batch. Skipping.")
-            return None
-        loss_dict = self.forward(images, targets)
-        if not loss_dict or not isinstance(loss_dict, dict):
-            console_logger.warning(f"Training step {batch_idx}: Model returned invalid loss_dict: {loss_dict}. Skipping loss calculation.")
-            return None
-        losses = 0.0
-        valid_loss_keys = 0
-        for key, loss in loss_dict.items():
-            if key in loss_weights and torch.is_tensor(loss) and not torch.isnan(loss) and not torch.isinf(loss):
-                weighted_loss = loss * loss_weights[key]
-                losses += weighted_loss
-                self.log(f'train/{key}', loss.detach(), on_step=True, on_epoch=True, logger=True, sync_dist=True)
-                valid_loss_keys += 1
-            else:
-                console_logger.warning(f"Training step {batch_idx}: Invalid or missing loss '{key}': {loss}. Skipping.")
-        if valid_loss_keys > 0:
-            self.log('train/loss', losses.detach(), prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True)
-            return losses
-        else:
-            console_logger.warning(f"Training step {batch_idx}: No valid losses found in loss_dict. Skipping optimizer step.")
-            return None
+        images = list(image for image in images)
+        targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
+        loss_dict = self.model(images, targets)
+        losses = sum(loss * loss_weights[key] for key, loss in loss_dict.items())
+        self.log('train/loss', losses, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True)
+        return losses
 
     def configure_optimizers(self):
-        decay, no_decay = [], []
-        for name, param in self.model.named_parameters():
-            if not param.requires_grad: continue
-            if len(param.shape) == 1 or name.endswith(".bias") or "norm" in name.lower(): no_decay.append(param)
-            else: decay.append(param)
-        optimizer_grouped_parameters = [
-            {'params': decay, 'weight_decay': self.weight_decay}, {'params': no_decay, 'weight_decay': 0.0}
-        ]
-        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=self.lr)
-        total_steps = 10000
-        if hasattr(self, 'trainer') and self.trainer.datamodule and hasattr(self.trainer, 'max_epochs'):
-            try:
-                len_train_loader = len(self.trainer.datamodule.train_dataloader())
-                accum = self.trainer.accumulate_grad_batches
-                epochs = self.trainer.max_epochs
-                if len_train_loader > 0 and accum > 0 and epochs > 0:
-                    total_steps = (len_train_loader // accum) * epochs
-                else: raise ValueError("Invalid dataloader length, accumulation steps, or epochs for step calculation.")
-            except Exception as e: console_logger.error(f"Error calculating total_steps: {e}. Using fallback {total_steps}.")
-        else: console_logger.warning(f"Trainer context unavailable for step calculation. Using fallback {total_steps}.")
-        console_logger.info(f"[Optimizer] AdamW | LR: {self.lr} | WD: {self.weight_decay}")
-        console_logger.info(f"[Scheduler] OneCycleLR | Max LR: {self.lr} | Steps: {total_steps} | PctStart: {args.one_cycle_lr_pct}")
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.lr,
+            weight_decay=self.weight_decay
+        )
+        # Calculate total steps accounting for gradient accumulation and multi-GPU
+        num_gpus = self.trainer.num_devices if hasattr(self.trainer, 'num_devices') else 1
+        accumulate_grad_batches = self.trainer.accumulate_grad_batches
+        total_steps = (len(self.trainer.datamodule.train_dataloader())) * self.trainer.max_epochs
+
+        print(f"[INFO]: Number of steps calculated {total_steps}")
+
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
-            optimizer, max_lr=self.lr, total_steps=total_steps, pct_start=args.one_cycle_lr_pct,
-            final_div_factor=1e4, three_phase=args.one_cycle_lr_three_phase )
-        return {"optimizer": optimizer, "lr_scheduler": {"scheduler": scheduler, "interval": "step", "frequency": 1}}
+            optimizer,
+            max_lr=self.lr,
+            total_steps=total_steps,
+            pct_start=args.one_cycle_lr_pct,
+            final_div_factor=1e5,
+            three_phase=args.one_cycle_lr_three_phase
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1
+            }
+        }
 
 # --- Data Handling ---
 def resize_and_pad_image(image: Image.Image, target_size=(1024, 1024)):
