@@ -281,7 +281,7 @@ def freeze_model(model: torch.nn.Module):
         param.requires_grad = False
 
 class SamEmbeddingModelWithFPN(torch.nn.Module):
-    def __init__(self, model_name, encoder_output_channels=256, fpn_out_channels=256):
+    def __init__(self, model_name, encoder_output_channels=168, fpn_out_channels=256):
         super().__init__()
         self.model_name = model_name
         self.encoder_output_channels = encoder_output_channels
