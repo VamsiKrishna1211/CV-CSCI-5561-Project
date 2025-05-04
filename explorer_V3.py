@@ -405,6 +405,16 @@ class MaskRCNNLightning(pl.LightningModule):
         self.log('train/loss', losses, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True)
         for key, loss in loss_dict.items():
             self.log(f'train/{key}', loss, on_step=True, on_epoch=True, logger=True, sync_dist=True)
+        # Debug: Count parameters with gradients
+        grad_count = sum(1 for p in self.model.parameters() if p.grad is not None)
+        self.log('train/grad_count', grad_count, on_step=True, on_epoch=True, logger=True, sync_dist=True)
+        # Manually log gradient histograms every 10 steps
+        if self.global_step % 10 == 0 and hasattr(self.logger.experiment, 'log'):
+            for name, param in self.model.named_parameters():
+                if param.grad is not None:
+                    self.logger.experiment.log({
+                        f"gradients/{name}": wandb.Histogram(param.grad.cpu().detach().numpy())
+                    })
         return losses
 
     def configure_optimizers(self):
@@ -434,7 +444,6 @@ class MaskRCNNLightning(pl.LightningModule):
                 "frequency": 1
             }
         }
-
 # --- Data Handling ---
 def resize_and_pad_image(image: Image.Image, target_size=(1024, 1024)):
     try:
@@ -793,9 +802,6 @@ if __name__ == "__main__":
                     config=vars(args)
                 )
                 console_logger.info(f"Initialized WandB logger for project: {args.wandb_project}")
-                # Watch the underlying Mask R-CNN model for gradients
-                wandb_logger.watch(model.model, log="gradients", log_freq=10)
-                console_logger.info("W&B watching model.model for gradient histograms")
         except Exception as e:
             console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
             wandb_logger = None
@@ -814,6 +820,8 @@ if __name__ == "__main__":
         if trainer.is_global_zero:
             num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
             console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
+            trainable_params = [name for name, p in model.model.named_parameters() if p.requires_grad]
+            console_logger.info(f"Trainable parameter names: {trainable_params[:10]}")
             if hasattr(torch.cuda, 'mem_get_info') and torch.cuda.is_available():
                 free, total = torch.cuda.mem_get_info()
                 console_logger.info(f"GPU Memory (Rank 0): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
