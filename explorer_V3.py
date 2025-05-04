@@ -311,7 +311,9 @@ class SamEmbeddingModelWithFPN(torch.nn.Module):
         if height % self.patch_size != 0 or width % self.patch_size != 0:
             raise ValueError(f"Input dimensions ({height}, {width}) must be divisible by patch_size ({self.patch_size})")
         try:
-            outputs = self.model(pixel_values=inputs)
+            outputs = self.model(pixel_values=inputs, output_hidden_states=True)
+            if outputs.vision_hidden_states is None:
+                raise ValueError("SAM model did not return vision_hidden_states. Ensure the model supports hidden state output.")
             features = outputs.vision_hidden_states[-1]  # Use last vision hidden state from SAM
         except Exception as e:
             console_logger.error(f"SAM forward pass failed: {e}")
