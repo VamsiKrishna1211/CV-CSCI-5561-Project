@@ -440,56 +440,145 @@ class MaskRCNNLightning(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         images, targets = batch
         if images is None or targets is None:
-            console_logger.warning("Empty batch received, skipping.")
-            return None
-        images = list(image for image in images)
+            console_logger.warning(f"[{self.global_rank}] Empty batch received at step {self.global_step}, skipping.")
+            return None # Skip this step
+
+        # Determine actual batch size BEFORE processing
+        actual_batch_size = len(images)
+        if actual_batch_size == 0:
+             console_logger.warning(f"[{self.global_rank}] Batch with zero images received at step {self.global_step}, skipping.")
+             return None
+
+        images = list(image.to(self.device) for image in images) # Ensure images are on device
         targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
+
         try:
+            # Ensure model is in training mode (Lightning usually handles this)
+            self.model.train()
             loss_dict = self.model(images, targets)
         except Exception as e:
-            console_logger.error(f"Model forward pass failed: {e}")
+            console_logger.error(f"[{self.global_rank}] Model forward/loss calculation failed at step {self.global_step}: {e}", exc_info=True) # Log traceback
+            # Depending on the error, decide whether to skip or stop
+            # Returning None skips the optimizer step for this batch
             return None
-        losses = sum(loss * loss_weights[key] for key, loss in loss_dict.items())
-        self.log('train/loss', losses, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True)
+
+        # Validate loss_dict
+        if not loss_dict or not isinstance(loss_dict, dict):
+             console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict at step {self.global_step}. Skipping step.")
+             return None
+
+        # Aggregate losses, ensuring they are valid tensors
+        losses = []
+        valid_loss_keys = []
         for key, loss in loss_dict.items():
-            self.log(f'train/{key}', loss, on_step=True, on_epoch=True, logger=True, sync_dist=True)
-        # Log gradient norm for smooth tracking
-        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-        self.log('train/grad_norm', grad_norm, on_step=True, on_epoch=True, logger=True, sync_dist=True)
-        # Log gradient histograms for key parameters every 50 steps to reduce overhead
-        if self.global_step % 50 == 0 and hasattr(self.logger, 'experiment') and self.logger.experiment:
-            for name, param in self.model.named_parameters():
-                if param.grad is not None and 'backbone' not in name:  # Focus on non-backbone params
-                    try:
-                        self.logger.experiment.log({
-                            f"gradients/{name}": wandb.Histogram(param.grad.cpu().detach().numpy())
-                        })
-                    except Exception as e:
-                        console_logger.warning(f"Failed to log gradient histogram for {name}: {e}")
-        return losses
+             # Check if the loss component is valid
+             if torch.is_tensor(loss) and not torch.isnan(loss) and not torch.isinf(loss):
+                 # Apply weight IF the key exists in our weights dict
+                 weight = loss_weights.get(key, 1.0) # Default to 1.0 if key not found
+                 losses.append(loss * weight)
+                 valid_loss_keys.append(key)
+             else:
+                  console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for loss key '{key}' at step {self.global_step}: {loss}. Skipping this component.")
+
+        # Check if we have any valid losses left
+        if not losses:
+            console_logger.warning(f"[{self.global_rank}] No valid loss components found in loss_dict at step {self.global_step}. Skipping backward pass.")
+            return None
+
+        # Sum valid, weighted losses
+        total_loss = sum(losses)
+
+        # Final check on total_loss
+        if not torch.is_tensor(total_loss) or torch.isnan(total_loss) or torch.isinf(total_loss):
+             console_logger.error(f"[{self.global_rank}] Invalid total loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Skipping step.")
+             return None # Skip optimizer step if total loss is invalid
+
+
+        # --- MODIFICATION: Add batch_size and check validity ---
+        self.log('train/loss', total_loss, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+        for key in valid_loss_keys: # Log only the valid components used
+             loss_val = loss_dict[key]
+             # Check again before logging just in case (though checked above)
+             if torch.is_tensor(loss_val) and not torch.isnan(loss_val) and not torch.isinf(loss_val):
+                 self.log(f'train/{key}', loss_val, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+
+        # Log gradient histograms (Conceptually happens after backward)
+        # Check added for self.logger and experiment existence
+        if self.global_step % 50 == 0 and self.logger and hasattr(self.logger, 'experiment') and self.logger.experiment and self.trainer.is_global_zero:
+             # Wrapping histogram logging in try-except
+             try:
+                 with torch.no_grad(): # Ensure no gradients are calculated here
+                    for name, param in self.model.named_parameters():
+                        # Log histograms only on rank 0 to avoid clutter/redundancy
+                        if param.grad is not None and 'backbone' not in name: # Focus on non-backbone
+                            # Ensure param.grad is valid before logging
+                            if not torch.isnan(param.grad).any() and not torch.isinf(param.grad).any():
+                                self.logger.experiment.log({
+                                    f"gradients/{name}": wandb.Histogram(param.grad.detach().cpu().numpy()) # Detach and move to CPU
+                                }, step=self.global_step) # Explicitly log step
+                            else:
+                                console_logger.warning(f"[{self.global_rank}] Found NaN/Inf in gradient for {name} at step {self.global_step}. Skipping histogram logging.")
+             except Exception as e:
+                 console_logger.warning(f"[{self.global_rank}] Failed to log gradient histogram at step {self.global_step}: {e}")
+
+
+        return total_loss # Return the valid total loss tensor for backward pass
 
     def configure_optimizers(self):
+        # Filter parameters to ensure only those requiring gradients are optimized
         optimizer = torch.optim.AdamW(
-            self.parameters(),
+            filter(lambda p: p.requires_grad, self.parameters()),
             lr=self.lr,
             weight_decay=self.weight_decay
         )
-        num_gpus = self.trainer.num_devices if hasattr(self.trainer, 'num_devices') else 1
-        accumulate_grad_batches = self.trainer.accumulate_grad_batches
-        try:
-            total_steps = (len(self.trainer.datamodule.train_dataloader()) // (accumulate_grad_batches * num_gpus)) * self.trainer.max_epochs
-        except Exception as e:
-            console_logger.warning(f"Failed to calculate total steps: {e}. Using default 1000 steps.")
-            total_steps = 1000
-        console_logger.info(f"Number of steps calculated: {total_steps}")
+
+        # Calculate total steps for the scheduler robustly
+        total_steps = 0
+        if self.trainer and hasattr(self.trainer, 'datamodule') and self.trainer.datamodule and self.trainer.max_epochs is not None and self.trainer.max_epochs > 0:
+            try:
+                # Need the dataloader from the datamodule
+                # Calling train_dataloader() might initialize it if not already done
+                train_loader = self.trainer.datamodule.train_dataloader()
+                
+                # len(dataloader) gives number of batches per process per epoch
+                steps_per_epoch_per_process = len(train_loader)
+
+                if steps_per_epoch_per_process <= 0:
+                     raise ValueError("len(train_dataloader) returned <= 0")
+
+                # The total number of optimization steps across all epochs
+                total_optimization_steps = steps_per_epoch_per_process * self.trainer.max_epochs
+
+                console_logger.info(f"[{self.global_rank}] Scheduler calculation: Steps/epoch/process = {steps_per_epoch_per_process}, Max epochs = {self.trainer.max_epochs}")
+                console_logger.info(f"[{self.global_rank}] Calculated total optimization steps for OneCycleLR: {total_optimization_steps}")
+
+                if total_optimization_steps <= 0:
+                     raise ValueError("Calculated total_optimization_steps is not positive.")
+
+                total_steps = total_optimization_steps
+
+            except Exception as e:
+                console_logger.warning(f"[{self.global_rank}] Failed to accurately calculate total steps for LR scheduler: {e}. Using fallback estimate (2000 * max_epochs).")
+                # More generous fallback? Consider basing on dataset size if possible
+                fallback_estimate = 2000 * self.trainer.max_epochs
+                total_steps = max(1000, fallback_estimate) # Ensure at least 1000 steps
+                console_logger.info(f"[{self.global_rank}] Using fallback total_steps = {total_steps} for scheduler.")
+        else:
+             # This case might happen if configure_optimizers is called very early or max_epochs isn't set
+             console_logger.warning(f"[{self.global_rank}] Trainer/datamodule/max_epochs not fully available during optimizer configuration. Using fallback total_steps = 10000 for scheduler.")
+             total_steps = 10000 # Larger fallback if essential info is missing
+
+        console_logger.info(f"[{self.global_rank}] OneCycleLR using total_steps = {total_steps}")
+
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
             max_lr=self.lr,
-            total_steps=total_steps,
+            total_steps=total_steps, # Use the calculated total steps
             pct_start=args.one_cycle_lr_pct,
             final_div_factor=1e5,
             three_phase=args.one_cycle_lr_three_phase
         )
+
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -967,13 +1056,16 @@ if __name__ == "__main__":
             max_epochs=args.num_epochs,
             accelerator='gpu',
             devices=-1, # Use all available GPUs
-            strategy='ddp_find_unused_parameters_true', # Keep if needed, otherwise try 'ddp'
+            strategy='ddp_find_unused_parameters_true', # Keep for now
             callbacks=callbacks,
-            logger=wandb_logger if wandb_logger else True, # Use WandB logger if available
+            logger=wandb_logger if wandb_logger else True,
             accumulate_grad_batches=args.gradient_accumulation_steps,
-            precision='bf16-mixed', # Use '16-mixed' if bf16 not supported/desired
+            # --- MODIFICATION: Change precision ---
+            precision='32-true', # Use full precision to rule out AMP issues
             log_every_n_steps=args.log_steps,
             sync_batchnorm=True, # Let Trainer handle SyncBatchNorm for DDP
+            # --- ADDITION: Add gradient clipping configuration ---
+            gradient_clip_val=1.0 # Example: Clip gradients at norm 1.0 (adjust as needed)
         )
 
         # --- MODIFICATION: Add wandb.watch ---
