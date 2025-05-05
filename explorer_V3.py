@@ -174,6 +174,21 @@ COCO_CLASSES = [
     'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
 ]
 
+# --- Initialize Distributed Training ---
+def init_distributed():
+    if 'WORLD_SIZE' in os.environ and int(os.environ['WORLD_SIZE']) > 1:
+        if not torch.distributed.is_initialized():
+            backend = 'gloo' if not torch.cuda.is_available() else 'nccl'
+            torch.distributed.init_process_group(
+                backend=backend,
+                init_method='env://',
+                rank=int(os.environ.get('RANK', 0)),
+                world_size=int(os.environ['WORLD_SIZE'])
+            )
+            console_logger.info(f"Initialized distributed training with backend: {backend}")
+    else:
+        console_logger.info("Distributed training not required (single device).")
+
 # --- Dataset Download Utilities ---
 def download_file(url, dest_path_str):
     try:
@@ -389,7 +404,8 @@ class MaskRCNNLightning(pl.LightningModule):
             mask_predictor=mask_predictor
         )
         # Synchronize batch normalization across GPUs
-        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
+        if torch.cuda.is_available() and torch.cuda.device_count() > 1:
+            self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def forward(self, images, targets=None):
         if self.training and targets is not None:
@@ -742,6 +758,7 @@ def process_cv2_frame(model, frame_bgr, output_path, device, target_size, score_
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
+    init_distributed()  # Initialize distributed training if needed
     pl.seed_everything(args.seed, workers=True)
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -811,22 +828,22 @@ if __name__ == "__main__":
             wandb_logger = None
         trainer = pl.Trainer(
             max_epochs=args.num_epochs, 
-            accelerator='gpu', 
+            accelerator='auto',  # Automatically select CPU or GPU
             devices=-1,
-            strategy='ddp_find_unused_parameters_true', 
+            strategy='auto',  # Let PyTorch Lightning decide the strategy (DDP for multi-GPU, single device otherwise)
             callbacks=callbacks, 
             logger=wandb_logger if wandb_logger else True,
             accumulate_grad_batches=args.gradient_accumulation_steps, 
-            precision='bf16-mixed',
+            precision='bf16-mixed' if torch.cuda.is_available() else '32-true',  # Use bf16 only on GPU
             log_every_n_steps=args.log_steps, 
-            sync_batchnorm=True,
+            sync_batchnorm=torch.cuda.is_available() and torch.cuda.device_count() > 1,
         )
-        if trainer.is_global_zero:
+        if trainer.global_rank == 0:
             num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
             console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
             trainable_params = [name for name, p in model.model.named_parameters() if p.requires_grad]
             console_logger.info(f"Trainable parameter names: {trainable_params[:10]}")
-            if hasattr(torch.cuda, 'mem_get_info') and torch.cuda.is_available():
+            if torch.cuda.is_available() and hasattr(torch.cuda, 'mem_get_info'):
                 free, total = torch.cuda.mem_get_info()
                 console_logger.info(f"GPU Memory (Rank 0): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
         try:
