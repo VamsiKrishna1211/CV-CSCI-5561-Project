@@ -55,8 +55,6 @@ except ImportError:
     exit(1)
 from tqdm import tqdm
 import requests
-import torch.distributed
-import socket
 try:
     import cv2
 except ImportError:
@@ -121,8 +119,6 @@ def parse_args():
     train_group.add_argument("--rpn-bbox-reg-loss-weight", type=float, default=1.0, help="RPN bbox loss weight")
     train_group.add_argument("--one-cycle-lr-pct", type=float, default=0.1, help="OneCycleLR pct_start")
     train_group.add_argument("--one-cycle-lr-three-phase", action="store_true", default=False, help="Enable three phase OneCycleLR")
-    train_group.add_argument("--master-port", type=int, default=None,
-                        help="Port for distributed training (default: auto-select)")
 
     parsed_args = parser.parse_args()
 
@@ -134,8 +130,6 @@ def parse_args():
         parser.error("one_cycle_lr_pct must be between 0 and 1 (exclusive).")
     if not (isinstance(parsed_args.target_size, (list, tuple)) and len(parsed_args.target_size) == 2 and all(isinstance(x, int) and x > 0 for x in parsed_args.target_size)):
         parser.error("target_size must be two positive integers (height width).")
-    if parsed_args.master_port is not None and (parsed_args.master_port < 1024 or parsed_args.master_port > 65535):
-        parser.error("master-port must be between 1024 and 65535.")
 
     return parsed_args
 
@@ -179,54 +173,18 @@ COCO_CLASSES = [
     'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
 ]
 
-# --- Utility to Find Free Port ---
-def find_free_port(start_port=29500, max_attempts=100):
-    port = start_port
-    for _ in range(max_attempts):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(('localhost', port))
-                return port
-            except OSError:
-                port += 1
-    raise RuntimeError(f"Could not find a free port after {max_attempts} attempts starting from {start_port}")
-
 # --- Initialize Distributed Training ---
 def init_distributed():
     if 'WORLD_SIZE' in os.environ and int(os.environ['WORLD_SIZE']) > 1:
         if not torch.distributed.is_initialized():
             backend = 'gloo' if not torch.cuda.is_available() else 'nccl'
-            # Set MASTER_ADDR and MASTER_PORT
-            os.environ['MASTER_ADDR'] = os.environ.get('MASTER_ADDR', 'localhost')
-            if args.master_port is not None:
-                master_port = args.master_port
-            else:
-                master_port = os.environ.get('MASTER_PORT')
-                if master_port is None:
-                    master_port = find_free_port()
-                else:
-                    master_port = int(master_port)
-            os.environ['MASTER_PORT'] = str(master_port)
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    console_logger.info(f"Attempting to initialize distributed training on port {master_port} (Attempt {attempt+1}/{max_retries})")
-                    torch.distributed.init_process_group(
-                        backend=backend,
-                        init_method='env://',
-                        rank=int(os.environ.get('RANK', 0)),
-                        world_size=int(os.environ['WORLD_SIZE'])
-                    )
-                    console_logger.info(f"Initialized distributed training with backend: {backend}, port: {master_port}")
-                    break
-                except RuntimeError as e:
-                    if "address already in use" in str(e) and attempt < max_retries - 1:
-                        console_logger.warning(f"Port {master_port} in use. Retrying with a different port...")
-                        master_port = find_free_port(master_port + 1)
-                        os.environ['MASTER_PORT'] = str(master_port)
-                    else:
-                        console_logger.error(f"Failed to initialize distributed training: {e}")
-                        raise
+            torch.distributed.init_process_group(
+                backend=backend,
+                init_method='env://',
+                rank=int(os.environ.get('RANK', 0)),
+                world_size=int(os.environ['WORLD_SIZE'])
+            )
+            console_logger.info(f"Initialized distributed training with backend: {backend}")
     else:
         console_logger.info("Distributed training not required (single device).")
 
@@ -851,7 +809,6 @@ if __name__ == "__main__":
             args.logs_dir.mkdir(parents=True, exist_ok=True)
             checkpoint_dir = args.logs_dir / "checkpoints"
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
-            # Define the callbacks here
             chkpt_cb = ModelCheckpoint(
                 monitor='train/loss', 
                 dirpath=checkpoint_dir, 
