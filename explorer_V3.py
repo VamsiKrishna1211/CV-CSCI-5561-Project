@@ -903,17 +903,22 @@ if __name__ == "__main__":
         except Exception as e:
             console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
             wandb_logger = None
+        # Determine accelerator and strategy based on GPU availability
+        accelerator = 'gpu' if torch.cuda.is_available() else 'cpu'
+        devices = -1 if torch.cuda.is_available() else 1
+        strategy = 'ddp_find_unused_parameters_true' if torch.cuda.is_available() else 'auto'
+
         trainer = pl.Trainer(
             max_epochs=args.num_epochs,
-            accelerator='gpu',
-            devices=-1,
-            strategy='ddp_find_unused_parameters_true',
+            accelerator=accelerator,
+            devices=devices,
+            strategy=strategy,
             callbacks=callbacks,
             logger=wandb_logger if wandb_logger else True,
             accumulate_grad_batches=args.gradient_accumulation_steps,
-            precision='bf16-mixed',
+            precision='bf16-mixed' if torch.cuda.is_available() else '32-true',
             log_every_n_steps=args.log_steps,
-            sync_batchnorm=True,
+            sync_batchnorm=torch.cuda.is_available(),  # Disable sync_batchnorm on CPU
         )
         if trainer.is_global_zero:
             num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
