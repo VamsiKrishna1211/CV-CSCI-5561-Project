@@ -963,4 +963,4 @@ if __name__ == "__main__":
             torch.distributed.barrier()
         console_logger.info("Script finished.")
     finally:
-        cleanup_distributed()  # Ensure distributed process group is destroyed
+        cleanup_distributed()  
