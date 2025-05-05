@@ -56,6 +56,7 @@ except ImportError:
 from tqdm import tqdm
 import requests
 import torch.distributed
+import socket
 try:
     import cv2
 except ImportError:
@@ -120,6 +121,8 @@ def parse_args():
     train_group.add_argument("--rpn-bbox-reg-loss-weight", type=float, default=1.0, help="RPN bbox loss weight")
     train_group.add_argument("--one-cycle-lr-pct", type=float, default=0.1, help="OneCycleLR pct_start")
     train_group.add_argument("--one-cycle-lr-three-phase", action="store_true", default=False, help="Enable three phase OneCycleLR")
+    train_group.add_argument("--master-port", type=int, default=None,
+                        help="Port for distributed training (default: auto-select)")
 
     parsed_args = parser.parse_args()
 
@@ -131,6 +134,8 @@ def parse_args():
         parser.error("one_cycle_lr_pct must be between 0 and 1 (exclusive).")
     if not (isinstance(parsed_args.target_size, (list, tuple)) and len(parsed_args.target_size) == 2 and all(isinstance(x, int) and x > 0 for x in parsed_args.target_size)):
         parser.error("target_size must be two positive integers (height width).")
+    if parsed_args.master_port is not None and (parsed_args.master_port < 1024 or parsed_args.master_port > 65535):
+        parser.error("master-port must be between 1024 and 65535.")
 
     return parsed_args
 
@@ -174,20 +179,62 @@ COCO_CLASSES = [
     'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
 ]
 
+# --- Utility to Find Free Port ---
+def find_free_port(start_port=29500, max_attempts=100):
+    port = start_port
+    for _ in range(max_attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('localhost', port))
+                return port
+            except OSError:
+                port += 1
+    raise RuntimeError(f"Could not find a free port after {max_attempts} attempts starting from {start_port}")
+
 # --- Initialize Distributed Training ---
 def init_distributed():
     if 'WORLD_SIZE' in os.environ and int(os.environ['WORLD_SIZE']) > 1:
         if not torch.distributed.is_initialized():
             backend = 'gloo' if not torch.cuda.is_available() else 'nccl'
-            torch.distributed.init_process_group(
-                backend=backend,
-                init_method='env://',
-                rank=int(os.environ.get('RANK', 0)),
-                world_size=int(os.environ['WORLD_SIZE'])
-            )
-            console_logger.info(f"Initialized distributed training with backend: {backend}")
+            # Set MASTER_ADDR and MASTER_PORT
+            os.environ['MASTER_ADDR'] = os.environ.get('MASTER_ADDR', 'localhost')
+            if args.master_port is not None:
+                master_port = args.master_port
+            else:
+                master_port = os.environ.get('MASTER_PORT')
+                if master_port is None:
+                    master_port = find_free_port()
+                else:
+                    master_port = int(master_port)
+            os.environ['MASTER_PORT'] = str(master_port)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    console_logger.info(f"Attempting to initialize distributed training on port {master_port} (Attempt {attempt+1}/{max_retries})")
+                    torch.distributed.init_process_group(
+                        backend=backend,
+                        init_method='env://',
+                        rank=int(os.environ.get('RANK', 0)),
+                        world_size=int(os.environ['WORLD_SIZE'])
+                    )
+                    console_logger.info(f"Initialized distributed training with backend: {backend}, port: {master_port}")
+                    break
+                except RuntimeError as e:
+                    if "address already in use" in str(e) and attempt < max_retries - 1:
+                        console_logger.warning(f"Port {master_port} in use. Retrying with a different port...")
+                        master_port = find_free_port(master_port + 1)
+                        os.environ['MASTER_PORT'] = str(master_port)
+                    else:
+                        console_logger.error(f"Failed to initialize distributed training: {e}")
+                        raise
     else:
         console_logger.info("Distributed training not required (single device).")
+
+# --- Cleanup Distributed Training ---
+def cleanup_distributed():
+    if torch.distributed.is_initialized():
+        console_logger.info("Destroying distributed process group...")
+        torch.distributed.destroy_process_group()
 
 # --- Dataset Download Utilities ---
 def download_file(url, dest_path_str):
@@ -758,201 +805,205 @@ def process_cv2_frame(model, frame_bgr, output_path, device, target_size, score_
 
 # --- Main Execution Block ---
 if __name__ == "__main__":
-    init_distributed()  # Initialize distributed training if needed
-    pl.seed_everything(args.seed, workers=True)
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-    console_logger.info("Starting script...")
-    console_logger.debug(f"Arguments: {vars(args)}")
-    model = None
-    data_module = None
-    trainer = None
-    best_model_path_from_training = None
-    if args.num_epochs > 0:
-        try:
-            train_dataset, val_dataset, tensor_transform = prepare_coco_datasets(args)
-            data_module = COCODataModule(train_dataset, val_dataset, tensor_transform)
-            console_logger.info("DataModule initialized.")
-        except Exception as e:
-            console_logger.error(f"Dataset/DataModule setup failed: {e}. Cannot train.", exc_info=True)
-            exit(1)
     try:
-        model = MaskRCNNLightning(model_name=args.model_name, lr=args.learning_rate, weight_decay=args.weight_decay)
-        console_logger.info(f"Model '{args.model_name}' initialized.")
-    except Exception as e:
-        console_logger.error(f"Failed to initialize model: {e}", exc_info=True)
-        exit(1)
-    if args.num_epochs > 0 and data_module is not None:
-        console_logger.info("--- Starting Training Phase ---")
-        ckpt_path_for_fit = None
-        if args.resume_ckpt_path and args.resume_ckpt_path.is_file():
-            ckpt_path_for_fit = str(args.resume_ckpt_path)
-            console_logger.info(f"Training will resume from checkpoint: {ckpt_path_for_fit}")
-        elif args.load_model_weights and args.load_model_weights.is_file():
-            console_logger.info(f"Loading weights for training from: {args.load_model_weights}")
+        init_distributed()  # Initialize distributed training if needed
+        pl.seed_everything(args.seed, workers=True)
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        console_logger.info("Starting script...")
+        console_logger.debug(f"Arguments: {vars(args)}")
+        model = None
+        data_module = None
+        trainer = None
+        best_model_path_from_training = None
+        if args.num_epochs > 0:
             try:
-                checkpoint = torch.load(str(args.load_model_weights), map_location='cpu')
-                if 'state_dict' in checkpoint: 
-                    model.load_state_dict(checkpoint['state_dict'], strict=False)
-                else: 
-                    model.model.load_state_dict(checkpoint, strict=False)
-                console_logger.info("Weights loaded successfully.")
-            except Exception as e: 
-                console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
-        args.logs_dir.mkdir(parents=True, exist_ok=True)
-        checkpoint_dir = args.logs_dir / "checkpoints"
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        chkpt_cb = ModelCheckpoint(
-            monitor='train/loss', 
-            dirpath=checkpoint_dir, 
-            filename='best-{epoch:02d}-{train/loss:.4f}', 
-            save_top_k=3, 
-            mode='min', 
-            save_last=True
-        )
-        lr_mon = LearningRateMonitor(logging_interval='step')
-        callbacks = [chkpt_cb, lr_mon]
-        wandb_logger = None
+                train_dataset, val_dataset, tensor_transform = prepare_coco_datasets(args)
+                data_module = COCODataModule(train_dataset, val_dataset, tensor_transform)
+                console_logger.info("DataModule initialized.")
+            except Exception as e:
+                console_logger.error(f"Dataset/DataModule setup failed: {e}. Cannot train.", exc_info=True)
+                exit(1)
         try:
-            if args.wandb_project:
-                wandb_logger = WandbLogger(
-                    project=args.wandb_project, 
-                    log_model="all", 
-                    save_dir=str(args.logs_dir),
-                    config=vars(args)
-                )
-                console_logger.info(f"Initialized WandB logger for project: {args.wandb_project}")
+            model = MaskRCNNLightning(model_name=args.model_name, lr=args.learning_rate, weight_decay=args.weight_decay)
+            console_logger.info(f"Model '{args.model_name}' initialized.")
         except Exception as e:
-            console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
-            wandb_logger = None
-        trainer = pl.Trainer(
-            max_epochs=args.num_epochs, 
-            accelerator='auto',  # Automatically select CPU or GPU
-            devices=-1,
-            strategy='auto',  # Let PyTorch Lightning decide the strategy (DDP for multi-GPU, single device otherwise)
-            callbacks=callbacks, 
-            logger=wandb_logger if wandb_logger else True,
-            accumulate_grad_batches=args.gradient_accumulation_steps, 
-            precision='bf16-mixed' if torch.cuda.is_available() else '32-true',  # Use bf16 only on GPU
-            log_every_n_steps=args.log_steps, 
-            sync_batchnorm=torch.cuda.is_available() and torch.cuda.device_count() > 1,
-        )
-        if trainer.global_rank == 0:
-            num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-            console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
-            trainable_params = [name for name, p in model.model.named_parameters() if p.requires_grad]
-            console_logger.info(f"Trainable parameter names: {trainable_params[:10]}")
-            if torch.cuda.is_available() and hasattr(torch.cuda, 'mem_get_info'):
-                free, total = torch.cuda.mem_get_info()
-                console_logger.info(f"GPU Memory (Rank 0): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
-        try:
-            console_logger.info(f"Starting training...")
-            trainer.fit(model=model, datamodule=data_module, ckpt_path=ckpt_path_for_fit)
-            console_logger.info("Training finished.")
-            best_model_path_from_training = chkpt_cb.best_model_path
-        except Exception as e:
-            console_logger.error(f"Training failed: {e}", exc_info=True)
+            console_logger.error(f"Failed to initialize model: {e}", exc_info=True)
             exit(1)
-    elif args.num_epochs <= 0:
-        console_logger.info("Skipping training phase (num_epochs <= 0).")
-    else:
-        console_logger.error("Cannot train because DataModule initialization failed.")
-        exit(1)
-    run_inference = args.image_path or args.input_dir or args.video_path
-    is_rank_zero = torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True
-    if run_inference and is_rank_zero:
-        console_logger.info("--- Starting Inference Phase (Rank 0) ---")
-        ckpt_to_load_inf = None
-        if args.load_model_weights and args.load_model_weights.is_file():
-            ckpt_to_load_inf = str(args.load_model_weights)
-            console_logger.info(f"Using explicitly provided weights for inference: {ckpt_to_load_inf}")
-        elif best_model_path_from_training and Path(best_model_path_from_training).is_file():
-            ckpt_to_load_inf = best_model_path_from_training
-            console_logger.info(f"Using best checkpoint from training for inference: {ckpt_to_load_inf}")
-        elif args.resume_ckpt_path and args.resume_ckpt_path.is_file():
-             if args.num_epochs <= 0:
-                  ckpt_to_load_inf = str(args.resume_ckpt_path)
-                  console_logger.info(f"Using resumed checkpoint for inference (no new training): {ckpt_to_load_inf}")
-             else:
-                  console_logger.info("Using model state after resumed training for inference.")
-        else:
-             console_logger.warning("No specific checkpoint specified or found for inference. Using current model state (might be randomly initialized or from pretrained backbone).")
-        inference_model = model
-        if ckpt_to_load_inf:
-            console_logger.info(f"Loading model state from: {ckpt_to_load_inf}")
-            try:
-                inference_model = MaskRCNNLightning.load_from_checkpoint(
-                    ckpt_to_load_inf, map_location='cpu'
-                )
-                console_logger.info("Loaded full Lightning checkpoint.")
-            except Exception as e1:
-                console_logger.warning(f"Failed to load as Lightning checkpoint ({e1}). Trying to load state_dict.")
+        if args.num_epochs > 0 and data_module is not None:
+            console_logger.info("--- Starting Training Phase ---")
+            ckpt_path_for_fit = None
+            if args.resume_ckpt_path and args.resume_ckpt_path.is_file():
+                ckpt_path_for_fit = str(args.resume_ckpt_path)
+                console_logger.info(f"Training will resume from checkpoint: {ckpt_path_for_fit}")
+            elif args.load_model_weights and args.load_model_weights.is_file():
+                console_logger.info(f"Loading weights for training from: {args.load_model_weights}")
                 try:
-                     checkpoint = torch.load(ckpt_to_load_inf, map_location='cpu')
-                     if 'state_dict' in checkpoint:
-                          inference_model.load_state_dict(checkpoint['state_dict'], strict=False)
-                          console_logger.info("Loaded state_dict from checkpoint.")
-                     elif isinstance(checkpoint, dict):
-                          inference_model.model.load_state_dict(checkpoint, strict=False)
-                          console_logger.info("Loaded raw weights into model.")
-                     else: raise ValueError("Checkpoint format not recognized.")
-                except Exception as e2:
-                     console_logger.error(f"Failed to load weights/state_dict from {ckpt_to_load_inf}: {e2}. Inference will use previous model state.", exc_info=True)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        inference_model.to(device)
-        inference_model.eval()
-        inference_nn_model = inference_model.model
-        console_logger.info(f"Inference using device: {device}")
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        if args.video_path:
-            if cv2 is None: console_logger.error("OpenCV not available, cannot process video."); exit(1)
-            video_path = Path(args.video_path)
-            if not video_path.is_file(): console_logger.error(f"Video file not found: {video_path}")
-            else:
-                console_logger.info(f"Processing video: {video_path}")
-                cap = cv2.VideoCapture(str(video_path))
-                if not cap.isOpened(): console_logger.error(f"Cannot open video: {video_path}")
-                else:
-                    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                    fps = cap.get(cv2.CAP_PROP_FPS)
-                    console_logger.info(f"Video Info: ~{frame_count} frames, {fps:.2f} FPS")
-                    frame_num = 0
-                    with tqdm(total=frame_count if frame_count > 0 else None, desc="Video Processing") as pbar:
-                        while True:
-                            ret, frame = cap.read(); frame_num += 1
-                            if not ret: console_logger.info("End of video or read error."); break
-                            out_path = args.output_dir / f"frame_{frame_num:06d}.png"
-                            process_cv2_frame(inference_nn_model, frame, str(out_path), device, args.target_size, args.frame_save_score_threshold)
-                            pbar.update(1)
-                    cap.release(); console_logger.info(f"Video processing finished. Output in {args.output_dir}")
-        elif args.input_dir:
-            input_dir = Path(args.input_dir)
-            if not input_dir.is_dir(): console_logger.error(f"Input directory not found: {input_dir}")
-            else:
-                console_logger.info(f"Processing image directory: {input_dir}")
-                img_ext = ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff']
-                files = sorted([p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() in img_ext])
-                if not files: console_logger.warning("No supported image files found.")
-                else:
-                    console_logger.info(f"Found {len(files)} images.")
-                    for f in tqdm(files, desc="Image Processing"):
-                        out_path = args.output_dir / f"{f.stem}_processed.png"
-                        process_and_save_frame(inference_nn_model, str(f), str(out_path), device, args.target_size, args.frame_save_score_threshold)
-                    console_logger.info(f"Directory processing finished. Output in {args.output_dir}")
-        elif args.image_path:
-            img_path = Path(args.image_path)
-            if not img_path.is_file(): console_logger.error(f"Input image not found: {img_path}")
-            else:
-                console_logger.info(f"Processing single image: {img_path}")
-                out_path = args.output_dir / f"{img_path.stem}_processed.png"
-                success = process_and_save_frame(inference_nn_model, str(img_path), str(out_path), device, args.target_size, args.frame_save_score_threshold)
-                if success: console_logger.info(f"Single image processing finished. Output: {out_path}")
-                else: console_logger.error("Single image processing failed.")
+                    checkpoint = torch.load(str(args.load_model_weights), map_location='cpu')
+                    if 'state_dict' in checkpoint: 
+                        model.load_state_dict(checkpoint['state_dict'], strict=False)
+                    else: 
+                        model.model.load_state_dict(checkpoint, strict=False)
+                    console_logger.info("Weights loaded successfully.")
+                except Exception as e: 
+                    console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
+            args.logs_dir.mkdir(parents=True, exist_ok=True)
+            checkpoint_dir = args.logs_dir / "checkpoints"
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            # Define the callbacks here
+            chkpt_cb = ModelCheckpoint(
+                monitor='train/loss', 
+                dirpath=checkpoint_dir, 
+                filename='best-{epoch:02d}-{train/loss:.4f}', 
+                save_top_k=3, 
+                mode='min', 
+                save_last=True
+            )
+            lr_mon = LearningRateMonitor(logging_interval='step')
+            callbacks = [chkpt_cb, lr_mon]
+            wandb_logger = None
+            try:
+                if args.wandb_project:
+                    wandb_logger = WandbLogger(
+                        project=args.wandb_project, 
+                        log_model="all", 
+                        save_dir=str(args.logs_dir),
+                        config=vars(args)
+                    )
+                    console_logger.info(f"Initialized WandB logger for project: {args.wandb_project}")
+            except Exception as e:
+                console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
+                wandb_logger = None
+            trainer = pl.Trainer(
+                max_epochs=args.num_epochs, 
+                accelerator='auto',  # Automatically select CPU or GPU
+                devices=-1,
+                strategy='auto',  # Let PyTorch Lightning decide the strategy (DDP for multi-GPU, single device otherwise)
+                callbacks=callbacks, 
+                logger=wandb_logger if wandb_logger else True,
+                accumulate_grad_batches=args.gradient_accumulation_steps, 
+                precision='bf16-mixed' if torch.cuda.is_available() else '32-true',  # Use bf16 only on GPU
+                log_every_n_steps=args.log_steps, 
+                sync_batchnorm=torch.cuda.is_available() and torch.cuda.device_count() > 1,
+            )
+            if trainer.global_rank == 0:
+                num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+                console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
+                trainable_params = [name for name, p in model.model.named_parameters() if p.requires_grad]
+                console_logger.info(f"Trainable parameter names: {trainable_params[:10]}")
+                if torch.cuda.is_available() and hasattr(torch.cuda, 'mem_get_info'):
+                    free, total = torch.cuda.mem_get_info()
+                    console_logger.info(f"GPU Memory (Rank 0): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
+            try:
+                console_logger.info(f"Starting training...")
+                trainer.fit(model=model, datamodule=data_module, ckpt_path=ckpt_path_for_fit)
+                console_logger.info("Training finished.")
+                best_model_path_from_training = chkpt_cb.best_model_path
+            except Exception as e:
+                console_logger.error(f"Training failed: {e}", exc_info=True)
+                exit(1)
+        elif args.num_epochs <= 0:
+            console_logger.info("Skipping training phase (num_epochs <= 0).")
         else:
-             console_logger.info("No inference input specified.")
-    elif run_inference and not is_rank_zero:
-         console_logger.debug(f"Skipping inference on Rank {torch.distributed.get_rank()}.")
-    if torch.distributed.is_initialized():
-        torch.distributed.barrier()
-    console_logger.info("Script finished.")
+            console_logger.error("Cannot train because DataModule initialization failed.")
+            exit(1)
+        run_inference = args.image_path or args.input_dir or args.video_path
+        is_rank_zero = torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True
+        if run_inference and is_rank_zero:
+            console_logger.info("--- Starting Inference Phase (Rank 0) ---")
+            ckpt_to_load_inf = None
+            if args.load_model_weights and args.load_model_weights.is_file():
+                ckpt_to_load_inf = str(args.load_model_weights)
+                console_logger.info(f"Using explicitly provided weights for inference: {ckpt_to_load_inf}")
+            elif best_model_path_from_training and Path(best_model_path_from_training).is_file():
+                ckpt_to_load_inf = best_model_path_from_training
+                console_logger.info(f"Using best checkpoint from training for inference: {ckpt_to_load_inf}")
+            elif args.resume_ckpt_path and args.resume_ckpt_path.is_file():
+                 if args.num_epochs <= 0:
+                      ckpt_to_load_inf = str(args.resume_ckpt_path)
+                      console_logger.info(f"Using resumed checkpoint for inference (no new training): {ckpt_to_load_inf}")
+                 else:
+                      console_logger.info("Using model state after resumed training for inference.")
+            else:
+                 console_logger.warning("No specific checkpoint specified or found for inference. Using current model state (might be randomly initialized or from pretrained backbone).")
+            inference_model = model
+            if ckpt_to_load_inf:
+                console_logger.info(f"Loading model state from: {ckpt_to_load_inf}")
+                try:
+                    inference_model = MaskRCNNLightning.load_from_checkpoint(
+                        ckpt_to_load_inf, map_location='cpu'
+                    )
+                    console_logger.info("Loaded full Lightning checkpoint.")
+                except Exception as e1:
+                    console_logger.warning(f"Failed to load as Lightning checkpoint ({e1}). Trying to load state_dict.")
+                    try:
+                         checkpoint = torch.load(ckpt_to_load_inf, map_location='cpu')
+                         if 'state_dict' in checkpoint:
+                              inference_model.load_state_dict(checkpoint['state_dict'], strict=False)
+                              console_logger.info("Loaded state_dict from checkpoint.")
+                         elif isinstance(checkpoint, dict):
+                              inference_model.model.load_state_dict(checkpoint, strict=False)
+                              console_logger.info("Loaded raw weights into model.")
+                         else: raise ValueError("Checkpoint format not recognized.")
+                    except Exception as e2:
+                         console_logger.error(f"Failed to load weights/state_dict from {ckpt_to_load_inf}: {e2}. Inference will use previous model state.", exc_info=True)
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            inference_model.to(device)
+            inference_model.eval()
+            inference_nn_model = inference_model.model
+            console_logger.info(f"Inference using device: {device}")
+            args.output_dir.mkdir(parents=True, exist_ok=True)
+            if args.video_path:
+                if cv2 is None: console_logger.error("OpenCV not available, cannot process video."); exit(1)
+                video_path = Path(args.video_path)
+                if not video_path.is_file(): console_logger.error(f"Video file not found: {video_path}")
+                else:
+                    console_logger.info(f"Processing video: {video_path}")
+                    cap = cv2.VideoCapture(str(video_path))
+                    if not cap.isOpened(): console_logger.error(f"Cannot open video: {video_path}")
+                    else:
+                        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                        fps = cap.get(cv2.CAP_PROP_FPS)
+                        console_logger.info(f"Video Info: ~{frame_count} frames, {fps:.2f} FPS")
+                        frame_num = 0
+                        with tqdm(total=frame_count if frame_count > 0 else None, desc="Video Processing") as pbar:
+                            while True:
+                                ret, frame = cap.read(); frame_num += 1
+                                if not ret: console_logger.info("End of video or read error."); break
+                                out_path = args.output_dir / f"frame_{frame_num:06d}.png"
+                                process_cv2_frame(inference_nn_model, frame, str(out_path), device, args.target_size, args.frame_save_score_threshold)
+                                pbar.update(1)
+                        cap.release(); console_logger.info(f"Video processing finished. Output in {args.output_dir}")
+            elif args.input_dir:
+                input_dir = Path(args.input_dir)
+                if not input_dir.is_dir(): console_logger.error(f"Input directory not found: {input_dir}")
+                else:
+                    console_logger.info(f"Processing image directory: {input_dir}")
+                    img_ext = ['.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff']
+                    files = sorted([p for p in input_dir.iterdir() if p.is_file() and p.suffix.lower() in img_ext])
+                    if not files: console_logger.warning("No supported image files found.")
+                    else:
+                        console_logger.info(f"Found {len(files)} images.")
+                        for f in tqdm(files, desc="Image Processing"):
+                            out_path = args.output_dir / f"{f.stem}_processed.png"
+                            process_and_save_frame(inference_nn_model, str(f), str(out_path), device, args.target_size, args.frame_save_score_threshold)
+                        console_logger.info(f"Directory processing finished. Output in {args.output_dir}")
+            elif args.image_path:
+                img_path = Path(args.image_path)
+                if not img_path.is_file(): console_logger.error(f"Input image not found: {img_path}")
+                else:
+                    console_logger.info(f"Processing single image: {img_path}")
+                    out_path = args.output_dir / f"{img_path.stem}_processed.png"
+                    success = process_and_save_frame(inference_nn_model, str(img_path), str(out_path), device, args.target_size, args.frame_save_score_threshold)
+                    if success: console_logger.info(f"Single image processing finished. Output: {out_path}")
+                    else: console_logger.error("Single image processing failed.")
+            else:
+                 console_logger.info("No inference input specified.")
+        elif run_inference and not is_rank_zero:
+             console_logger.debug(f"Skipping inference on Rank {torch.distributed.get_rank()}.")
+        if torch.distributed.is_initialized():
+            torch.distributed.barrier()
+        console_logger.info("Script finished.")
+    finally:
+        cleanup_distributed()  # Ensure distributed process group is destroyed
