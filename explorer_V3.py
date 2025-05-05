@@ -903,22 +903,22 @@ if __name__ == "__main__":
         except Exception as e:
             console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
             wandb_logger = None
-        # Determine accelerator and strategy based on GPU availability
-        accelerator = 'gpu' if torch.cuda.is_available() else 'cpu'
-        devices = -1 if torch.cuda.is_available() else 1
-        strategy = 'ddp_find_unused_parameters_true' if torch.cuda.is_available() else 'auto'
+        # Ensure GPU is available
+        if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
+            console_logger.error("No GPU available. This script requires a GPU for execution.")
+            exit(1)
 
         trainer = pl.Trainer(
             max_epochs=args.num_epochs,
-            accelerator=accelerator,
-            devices=devices,
-            strategy=strategy,
+            accelerator='gpu',
+            devices=-1,  # Use all available GPUs
+            strategy='ddp_find_unused_parameters_true',
             callbacks=callbacks,
             logger=wandb_logger if wandb_logger else True,
             accumulate_grad_batches=args.gradient_accumulation_steps,
-            precision='bf16-mixed' if torch.cuda.is_available() else '32-true',
+            precision='bf16-mixed',
             log_every_n_steps=args.log_steps,
-            sync_batchnorm=torch.cuda.is_available(),  # Disable sync_batchnorm on CPU
+            sync_batchnorm=True,
         )
         if trainer.is_global_zero:
             num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
