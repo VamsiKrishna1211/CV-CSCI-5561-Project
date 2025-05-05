@@ -408,8 +408,11 @@ class MaskRCNNLightning(pl.LightningModule):
         # Debug: Count parameters with gradients
         grad_count = sum(1 for p in self.model.parameters() if p.grad is not None)
         self.log('train/grad_count', grad_count, on_step=True, on_epoch=True, logger=True, sync_dist=True)
-        # Manually log gradient histograms every 10 steps
-        if self.global_step % 10 == 0 and hasattr(self.logger.experiment, 'log'):
+        # Log gradient norm
+        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        self.log('train/grad_norm', grad_norm, on_step=True, on_epoch=True, logger=True, sync_dist=True)
+        # Manually log gradient histograms every 5 steps
+        if self.global_step % 5 == 0 and hasattr(self.logger.experiment, 'log'):
             for name, param in self.model.named_parameters():
                 if param.grad is not None:
                     self.logger.experiment.log({
@@ -426,7 +429,7 @@ class MaskRCNNLightning(pl.LightningModule):
         # Calculate total steps accounting for gradient accumulation and multi-GPU
         num_gpus = self.trainer.num_devices if hasattr(self.trainer, 'num_devices') else 1
         accumulate_grad_batches = self.trainer.accumulate_grad_batches
-        total_steps = (len(self.trainer.datamodule.train_dataloader())) * self.trainer.max_epochs
+        total_steps = (len(self.trainer.datamodule.train_dataloader()) // accumulate_grad_batches) * self.trainer.max_epochs
         console_logger.info(f"Number of steps calculated: {total_steps}")
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
@@ -444,6 +447,7 @@ class MaskRCNNLightning(pl.LightningModule):
                 "frequency": 1
             }
         }
+
 # --- Data Handling ---
 def resize_and_pad_image(image: Image.Image, target_size=(1024, 1024)):
     try:
