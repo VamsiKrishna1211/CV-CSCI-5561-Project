@@ -103,7 +103,7 @@ def parse_args():
                         help="Target size for image resizing (height width)")
     train_group.add_argument('--seed', type=int, default=42,
                         help="Random seed for reproducibility")
-    train_group.add_argument('--wandb-project', type=str, default="cv-course-project",
+    train_group.add_argument('--wandb-project', type=str, default="cv-sam-fpn-6",
                         help="Weights and Biases project name")
     train_group.add_argument("--log_steps", type=int, default=5,
                         help="Logging interval in steps")
@@ -367,46 +367,70 @@ class MaskRCNNLightning(pl.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
         self.save_hyperparameters()
-        backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
+
+        # Initialize Backbone
+        backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval() # Keep eval() if only fine-tuning heads initially
+
+        # Define RPN and RoI heads components based on torchvision
         anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
+        # Make sure featmap_names matches the keys returned by your FPN-enhanced backbone
+        # SamEmbeddingModelWithFPN returns a dict like {'0': features}, so ['0'] is likely correct
         roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=7, sampling_ratio=2)
         mask_roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=14, sampling_ratio=2)
-        box_head = FastRCNNConvFCHead((backbone.out_channels, 7, 7), [256, 256, 256, 256], [1024], norm_layer=torch.nn.BatchNorm2d)
-        mask_head = MaskRCNNHeads(backbone.out_channels, [256, 256, 256, 256], 1, norm_layer=torch.nn.BatchNorm2d)
-        box_predictor = FastRCNNPredictor(in_channels=1024, num_classes=91)
+
+        # Define heads using FastRCNNConvFCHead and MaskRCNNHeads for potentially better performance/flexibility
+        # Ensure norm_layer is appropriate, e.g., BatchNorm2d for SyncBatchNorm handled by Trainer
+        box_head = FastRCNNConvFCHead(
+            (backbone.out_channels, 7, 7), # Input: (FPN channels, RoI Align output H, W)
+            [256, 256, 256, 256],          # Conv layers channels
+            [1024],                        # FC layers channels
+            norm_layer=torch.nn.BatchNorm2d  # Use regular BatchNorm here; SyncBN handled by Trainer
+        )
+        mask_head = MaskRCNNHeads(
+            backbone.out_channels,         # Input channels from FPN
+            [256, 256, 256, 256],          # Hidden layers channels
+            1,                             # Dilation rate (standard)
+            norm_layer=torch.nn.BatchNorm2d  # Use regular BatchNorm here; SyncBN handled by Trainer
+        )
+
+        # Predictors remain the same
+        box_predictor = FastRCNNPredictor(in_channels=1024, num_classes=91) # 91 for COCO
         rpn_head = RPNHead(backbone.out_channels, anchor_generator.num_anchors_per_location()[0], conv_depth=2)
-        mask_predictor = MaskRCNNPredictor(in_channels=256, dim_reduced=256, num_classes=91)
+        mask_predictor = MaskRCNNPredictor(in_channels=256, dim_reduced=256, num_classes=91) # 91 for COCO
+
+        # Assemble the Mask R-CNN model
         self.model = MaskRCNN(
             backbone=backbone,
-            num_classes=None,
-            min_size=args.target_size[0],
+            num_classes=None, # Required for custom heads
+            # image_mean, image_std - Consider adding if needed, depends on backbone pretraining
+            min_size=args.target_size[0], # Use target_size for consistency
             max_size=args.target_size[1],
             rpn_anchor_generator=anchor_generator,
             rpn_head=rpn_head,
-            rpn_pre_nms_top_n_train=3000,
-            rpn_pre_nms_top_n_test=3000,
-            rpn_post_nms_top_n_train=3000,
-            rpn_post_nms_top_n_test=3000,
+            rpn_pre_nms_top_n_train=3000, # Adjusted potentially higher value
+            rpn_pre_nms_top_n_test=3000,  # Adjusted potentially higher value
+            rpn_post_nms_top_n_train=3000,# Adjusted potentially higher value
+            rpn_post_nms_top_n_test=3000, # Adjusted potentially higher value
             rpn_nms_thresh=0.7,
             rpn_fg_iou_thresh=0.7,
             rpn_bg_iou_thresh=0.3,
-            rpn_batch_size_per_image=1024,
+            rpn_batch_size_per_image=1024, # Increased potentially
             rpn_positive_fraction=0.5,
             box_roi_pool=roi_pooler,
-            box_head=box_head,
-            box_predictor=box_predictor,
+            box_head=box_head,             # Use custom box_head
+            box_predictor=box_predictor,   # Use custom box_predictor
             box_score_thresh=0.05,
             box_nms_thresh=0.5,
-            box_detections_per_img=3000,
+            box_detections_per_img=3000,   # Increased potentially
             box_fg_iou_thresh=0.5,
             box_bg_iou_thresh=0.5,
             box_batch_size_per_image=512,
             box_positive_fraction=0.25,
             mask_roi_pool=mask_roi_pooler,
-            mask_head=mask_head,
-            mask_predictor=mask_predictor
+            mask_head=mask_head,           # Use custom mask_head
+            mask_predictor=mask_predictor  # Use custom mask_predictor
         )
-        self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
+        #self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def forward(self, images, targets=None):
         if self.training and targets is not None:
@@ -838,14 +862,19 @@ def process_cv2_frame(model, frame_bgr, output_path, device, target_size, score_
 if __name__ == "__main__":
     pl.seed_everything(args.seed, workers=True)
     torch.backends.cudnn.benchmark = True
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+    # Set TF32 usage based on your hardware and needs
+    torch.backends.cuda.matmul.allow_tf32 = True # TF32 on matmul
+    torch.backends.cudnn.allow_tf32 = True      # TF32 on cuDNN
+
     console_logger.info("Starting script...")
     console_logger.debug(f"Arguments: {vars(args)}")
+
     model = None
     data_module = None
     trainer = None
     best_model_path_from_training = None
+
+    # --- Setup Data (if training) ---
     if args.num_epochs > 0:
         try:
             train_dataset, val_dataset, tensor_transform = prepare_coco_datasets(args)
@@ -854,91 +883,136 @@ if __name__ == "__main__":
         except Exception as e:
             console_logger.error(f"Dataset/DataModule setup failed: {e}. Cannot train.")
             exit(1)
+
+    # --- Initialize Model ---
     try:
-        model = MaskRCNNLightning(model_name=args.model_name, lr=args.learning_rate, weight_decay=args.weight_decay)
+        # Pass hyperparameters from args to the LightningModule
+        model = MaskRCNNLightning(
+            model_name=args.model_name,
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay
+        )
         console_logger.info(f"Model '{args.model_name}' initialized.")
     except Exception as e:
         console_logger.error(f"Failed to initialize model: {e}")
         exit(1)
+
+
+    # --- Training Phase ---
     if args.num_epochs > 0 and data_module is not None:
         console_logger.info("--- Starting Training Phase ---")
+
         ckpt_path_for_fit = None
+        # Resume logic
         if args.resume_ckpt_path and args.resume_ckpt_path.is_file():
             ckpt_path_for_fit = str(args.resume_ckpt_path)
             console_logger.info(f"Training will resume from checkpoint: {ckpt_path_for_fit}")
+        # Load weights logic (only if not resuming)
         elif args.load_model_weights and args.load_model_weights.is_file():
-            console_logger.info(f"Loading weights for training from: {args.load_model_weights}")
-            try:
-                checkpoint = torch.load(str(args.load_model_weights), map_location='cpu')
-                if 'state_dict' in checkpoint:
-                    model.load_state_dict(checkpoint['state_dict'], strict=False)
-                else:
-                    model.model.load_state_dict(checkpoint, strict=False)
-                console_logger.info("Weights loaded successfully.")
-            except Exception as e:
-                console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
+             console_logger.info(f"Loading weights for training from: {args.load_model_weights}")
+             try:
+                 # Load checkpoint onto CPU first to avoid device mismatches
+                 checkpoint = torch.load(str(args.load_model_weights), map_location='cpu')
+                 # Try loading Lightning state_dict first, then raw weights
+                 if 'state_dict' in checkpoint:
+                     model.load_state_dict(checkpoint['state_dict'], strict=False) # strict=False if fine-tuning
+                     console_logger.info("Loaded state_dict from checkpoint.")
+                 elif isinstance(checkpoint, dict): # Check if it's a raw state dict
+                    model.model.load_state_dict(checkpoint, strict=False) # Load directly into model attribute
+                    console_logger.info("Loaded raw model weights.")
+                 else:
+                    console_logger.warning(f"Unrecognized format in {args.load_model_weights}. Could not load weights.")
+                 console_logger.info("Weights loaded successfully for fine-tuning/training.")
+             except Exception as e:
+                 console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
+
+        # Setup logging and checkpoints
         args.logs_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_dir = args.logs_dir / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
         chkpt_cb = ModelCheckpoint(
-            monitor='train/loss',
+            monitor='train/loss', # Monitor training loss
             dirpath=checkpoint_dir,
             filename='best-{epoch:02d}-{train/loss:.4f}',
             save_top_k=3,
             mode='min',
-            save_last=True
+            save_last=True # Keep the latest checkpoint
         )
         lr_mon = LearningRateMonitor(logging_interval='step')
         callbacks = [chkpt_cb, lr_mon]
+
+        # Setup WandB Logger
         wandb_logger = None
-        try:
-            if args.wandb_project:
+        if args.wandb_project: # Check if a project name is provided
+            try:
                 wandb_logger = WandbLogger(
-                    project=args.wandb_project,
-                    log_model="all",
+                    project=args.wandb_project, # Use the argument directly
+                    log_model="all", # Log model checkpoints as W&B Artifacts
                     save_dir=str(args.logs_dir),
-                    config=vars(args)
+                    config=vars(args) # Log hyperparameters
                 )
                 console_logger.info(f"Initialized WandB logger for project: {args.wandb_project}")
-        except Exception as e:
-            console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
-            wandb_logger = None
+            except Exception as e:
+                console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
+                wandb_logger = None # Ensure it's None if setup fails
+
         # Ensure GPU is available
         if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
             console_logger.error("No GPU available. This script requires a GPU for execution.")
             exit(1)
 
+        # --- Initialize Trainer ---
         trainer = pl.Trainer(
             max_epochs=args.num_epochs,
             accelerator='gpu',
-            devices=-1,  # Use all available GPUs
-            strategy='ddp_find_unused_parameters_true',
+            devices=-1, # Use all available GPUs
+            strategy='ddp_find_unused_parameters_true', # Keep if needed, otherwise try 'ddp'
             callbacks=callbacks,
-            logger=wandb_logger if wandb_logger else True,
+            logger=wandb_logger if wandb_logger else True, # Use WandB logger if available
             accumulate_grad_batches=args.gradient_accumulation_steps,
-            precision='bf16-mixed',
+            precision='bf16-mixed', # Use '16-mixed' if bf16 not supported/desired
             log_every_n_steps=args.log_steps,
-            sync_batchnorm=True,
+            sync_batchnorm=True, # Let Trainer handle SyncBatchNorm for DDP
         )
+
+        # --- MODIFICATION: Add wandb.watch ---
+        # Log model graph using wandb.watch (only on rank 0)
+        if wandb_logger and trainer.is_global_zero:
+            try:
+                # Ensure logger experiment object is available
+                 # Common practice: watch after model is on device, before training loop
+                wandb_logger.watch(model, log='all', log_freq=max(100, args.log_steps)) # Log graph structure and optionally gradients/parameters
+                console_logger.info("WandB watching model graph and parameters.")
+            except Exception as e:
+                console_logger.warning(f"Failed to setup wandb.watch: {e}")
+        # -------------------------------------
+
         if trainer.is_global_zero:
             num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
             console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
+            # Optional: Log first few trainable param names for verification
             trainable_params = [name for name, p in model.model.named_parameters() if p.requires_grad]
             console_logger.info(f"Trainable parameter names (first 10): {trainable_params[:10]}")
+            # Log GPU memory before training starts
             if torch.cuda.is_available():
                 try:
                     free, total = torch.cuda.mem_get_info()
-                    console_logger.info(f"GPU Memory (Rank 0): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
+                    console_logger.info(f"GPU Memory (Rank 0 Before Fit): Free={free/1e9:.2f} GB, Total={total/1e9:.2f} GB")
                 except Exception as e:
                     console_logger.warning(f"Failed to get GPU memory info: {e}")
+
+        # --- Run Training ---
         try:
             console_logger.info("Starting training...")
             trainer.fit(model=model, datamodule=data_module, ckpt_path=ckpt_path_for_fit)
             console_logger.info("Training finished.")
+            # Store path to best model found during training
             best_model_path_from_training = chkpt_cb.best_model_path
         except Exception as e:
             console_logger.error(f"Training failed: {e}")
-            exit(1)
+            # Optionally re-raise or handle specific exceptions
+            exit(1) # Exit if training fails critically
     elif args.num_epochs == 0:
         console_logger.info("Skipping training phase (num_epochs = 0).")
     else:
@@ -1059,5 +1133,7 @@ if __name__ == "__main__":
         try:
             torch.distributed.barrier()
         except Exception as e:
-            console_logger.warning(f"Distributed barrier failed: {e}")
+            # This might fail if training failed and ranks are inconsistent
+            console_logger.warning(f"Distributed barrier failed at script end: {e}")
+
     console_logger.info("Script finished.")
