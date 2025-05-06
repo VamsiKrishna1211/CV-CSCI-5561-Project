@@ -672,14 +672,15 @@ def prepare_coco_datasets(args):
     except Exception as e:
         console_logger.error(f"Error loading COCO dataset from {base_dir}: {e}")
         raise
-    return train_dataset, val_dataset, None
+    return train_dataset, val_dataset, train_transform, val_transform
 
 class COCODataModule(pl.LightningDataModule):
-    def __init__(self, train_dataset, val_dataset, tensor_transform=None):
+    def __init__(self, train_dataset, val_dataset, train_transform, val_transform):
         super().__init__()
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
-        self.tensor_transform = tensor_transform
+        self.train_transform = train_transform
+        self.val_transform = val_transform
         self.batch_size = args.batch_size
         self.num_workers = args.num_workers
         self.pin_memory = True
@@ -693,7 +694,7 @@ class COCODataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset, batch_size=self.batch_size, shuffle=shuffle,
             num_workers=self.num_workers,
-            collate_fn=lambda b: collate_fn(b, lambda x: x),
+            collate_fn=lambda b: collate_fn(b, self.train_transform),
             pin_memory=self.pin_memory, sampler=sampler,
             persistent_workers=self.num_workers > 0,
             drop_last=True
@@ -706,7 +707,7 @@ class COCODataModule(pl.LightningDataModule):
         return DataLoader(
             self.val_dataset, batch_size=self.batch_size, shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=lambda b: collate_fn(b, lambda x: x),
+            collate_fn=lambda b: collate_fn(b, self.val_transform),
             pin_memory=self.pin_memory, sampler=sampler,
             persistent_workers=self.num_workers > 0
         )
@@ -753,22 +754,19 @@ def collate_fn(batch, tensor_transform):
     processed_images = []
     all_metadata = []
     target_size_h, target_size_w = tuple(args.target_size)
-    to_tensor = T.ToTensor()  # Fallback transform
     
     for img_pil in pil_images:
         processed_pil, metadata = resize_and_pad_image(img_pil, tuple(args.target_size))
         try:
-            # Apply tensor_transform if provided, else use fallback
-            img_tensor = tensor_transform(processed_pil) if callable(tensor_transform) else to_tensor(processed_pil)
+            img_tensor = tensor_transform(processed_pil)
             if not isinstance(img_tensor, torch.Tensor):
-                console_logger.warning("tensor_transform did not return a tensor. Using fallback ToTensor.")
-                img_tensor = to_tensor(processed_pil)
+                console_logger.error(f"tensor_transform returned non-tensor type: {type(img_tensor)}")
+                return None, None
             processed_images.append(img_tensor)
             all_metadata.append(metadata)
         except Exception as e:
-            console_logger.error(f"Tensor conversion failed: {e}. Using zero tensor.")
-            processed_images.append(torch.zeros((3, target_size_h, target_size_w)))
-            all_metadata.append({'original_size': (0, 0), 'resized_size': (0, 0), 'padding': (0, 0), 'scale': 1.0})
+            console_logger.error(f"Tensor conversion failed: {e}. Skipping batch.")
+            return None, None
     
     # Process targets (annotations)
     processed_targets = []
@@ -1012,8 +1010,8 @@ if __name__ == "__main__":
 
     if args.num_epochs > 0:
         try:
-            train_dataset, val_dataset, tensor_transform = prepare_coco_datasets(args)
-            data_module = COCODataModule(train_dataset, val_dataset, tensor_transform)
+            train_dataset, val_dataset, train_transform, val_transform = prepare_coco_datasets(args)
+            data_module = COCODataModule(train_dataset, val_dataset, train_transform, val_transform)
             console_logger.info("DataModule initialized.")
         except Exception as e:
             console_logger.error(f"Dataset/DataModule setup failed: {e}. Cannot train.")
