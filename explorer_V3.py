@@ -67,59 +67,59 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Instance Segmentation (Mask R-CNN + SAM Backbone) - Supports Image, Directory, and Video Input")
     input_group = parser.add_mutually_exclusive_group(required=False)
     input_group.add_argument('--image-path', type=str, default=None,
-                        help="Path to a single image for mask generation.")
+                             help="Path to a single image for mask generation.")
     input_group.add_argument('--input-dir', type=str, default=None,
-                        help="Path to a directory containing multiple image frames for processing.")
+                             help="Path to a directory containing multiple image frames for processing.")
     input_group.add_argument('--video-path', type=str, default=None,
-                        help="Path to a video file for processing.")
+                             help="Path to a video file for processing.")
     parser.add_argument('--output-dir', type=str, default="output_processed",
                         help="Directory to save processed frames/images with masks.")
     parser.add_argument('--frame-save-score-threshold', type=float, default=0.3,
                         help="Score threshold for masks to be saved in output frames/images.")
     train_group = parser.add_argument_group('Training Configuration')
     train_group.add_argument('--base-dir', type=str, default="/home/vamsik1211/Data/Assignments/Sem-2/CV/CourseProject/Instance_Segmentation Code CV Project/dataset/coco",
-                        help="Base directory for COCO dataset (for training)")
+                             help="Base directory for COCO dataset (for training)")
     train_group.add_argument('--train-ann', type=str, default="annotations/instances_train2017.json",
-                        help="Path to training annotations relative to base-dir")
+                             help="Path to training annotations relative to base-dir")
     train_group.add_argument('--val-ann', type=str, default="annotations/instances_val2017.json",
-                        help="Path to validation annotations relative to base-dir")
+                             help="Path to validation annotations relative to base-dir")
     train_group.add_argument('--model-name', type=str, default="Zigeng/SlimSAM-uniform-77",
-                        help="Hugging Face model name for SAM backbone")
+                             help="Hugging Face model name for SAM backbone")
     train_group.add_argument('--num-epochs', type=int, default=10,
-                        help="Number of training epochs (Set to 0 for inference only)")
+                             help="Number of training epochs (Set to 0 for inference only)")
     train_group.add_argument('--batch-size', type=int, default=16,
-                        help="Per-GPU batch size for data loaders")
+                             help="Per-GPU batch size for data loaders")
     train_group.add_argument('--num-workers', type=int, default=16,
-                        help="Number of workers for data loaders")
+                             help="Number of workers for data loaders")
     train_group.add_argument('--gradient-accumulation-steps', type=int, default=32,
-                        help="Number of batches to accumulate gradients over")
+                             help="Number of batches to accumulate gradients over")
     train_group.add_argument('--freeze-backbone', default=False, action='store_true',
-                        help="Freeze the backbone during training")
-    train_group.add_argument('--learning-rate', type=float, default=0.005,
-                        help="Initial learning rate for AdamW optimizer")
+                             help="Freeze the backbone during training")
+    train_group.add_argument('--learning-rate', type=float, default=0.001,
+                             help="Initial learning rate for AdamW optimizer")
     train_group.add_argument('--weight-decay', type=float, default=0.0005,
-                        help="Weight decay for AdamW optimizer")
+                             help="Weight decay for AdamW optimizer")
     train_group.add_argument('--target-size', type=int, nargs=2, default=(1024, 1024),
-                        help="Target size for image resizing (height width)")
+                             help="Target size for image resizing (height width)")
     train_group.add_argument('--seed', type=int, default=42,
-                        help="Random seed for reproducibility")
+                             help="Random seed for reproducibility")
     train_group.add_argument('--wandb-project', type=str, default="cv-sam-fpn-6",
-                        help="Weights and Biases project name")
+                             help="Weights and Biases project name")
     train_group.add_argument("--log_steps", type=int, default=5,
-                        help="Logging interval in steps")
+                             help="Logging interval in steps")
     train_group.add_argument("--resume-ckpt-path", type=str, default=None,
-                        help="Path for the checkpoint to resume training from")
+                             help="Path for the checkpoint to resume training from")
     train_group.add_argument("--load-model-weights", type=str, default=None,
-                        help="Path to load model weights for inference or fine-tuning (ignores optimizer state)")
+                             help="Path to load model weights for inference or fine-tuning (ignores optimizer state)")
     train_group.add_argument("--logs-dir", default="logs",
-                        help="Folder to save logs, weights, etc.")
+                             help="Folder to save logs, weights, etc.")
     train_group.add_argument("--classfier-loss-weight", type=float, default=1.0, help="Classifier loss weight")
     train_group.add_argument("--bbox-reg-loss-weight", type=float, default=1.0, help="Bounding box regression loss weight")
-    train_group.add_argument("--mask-loss-weight", type=float, default=1.0, help="Mask loss weight")
+    train_group.add_argument("--mask-loss-weight", type=float, default=2.0, help="Mask loss weight")
     train_group.add_argument("--objectness-loss-weight", type=float, default=1.0, help="Objectness loss weight")
     train_group.add_argument("--rpn-bbox-reg-loss-weight", type=float, default=1.0, help="RPN bbox loss weight")
-    train_group.add_argument("--one-cycle-lr-pct", type=float, default=0.1, help="OneCycleLR pct_start")
-    train_group.add_argument("--one-cycle-lr-three-phase", action="store_true", default=False, help="Enable three phase OneCycleLR")
+    train_group.add_argument("--one-cycle-lr-pct", type=float, default=0.3, help="OneCycleLR pct_start")
+    train_group.add_argument("--one-cycle-lr-three-phase", action="store_true", default=True, help="Enable three phase OneCycleLR")
 
     parsed_args = parser.parse_args()
 
@@ -369,68 +369,60 @@ class MaskRCNNLightning(pl.LightningModule):
         self.save_hyperparameters()
 
         # Initialize Backbone
-        backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval() # Keep eval() if only fine-tuning heads initially
+        backbone = SamEmbeddingModelWithFPN(model_name=model_name).eval()
 
-        # Define RPN and RoI heads components based on torchvision
+        # Define RPN and RoI heads components
         anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
-        # Make sure featmap_names matches the keys returned by your FPN-enhanced backbone
-        # SamEmbeddingModelWithFPN returns a dict like {'0': features}, so ['0'] is likely correct
         roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=7, sampling_ratio=2)
         mask_roi_pooler = MultiScaleRoIAlign(featmap_names=['0'], output_size=14, sampling_ratio=2)
 
-        # Define heads using FastRCNNConvFCHead and MaskRCNNHeads for potentially better performance/flexibility
-        # Ensure norm_layer is appropriate, e.g., BatchNorm2d for SyncBatchNorm handled by Trainer
         box_head = FastRCNNConvFCHead(
-            (backbone.out_channels, 7, 7), # Input: (FPN channels, RoI Align output H, W)
-            [256, 256, 256, 256],          # Conv layers channels
-            [1024],                        # FC layers channels
-            norm_layer=torch.nn.BatchNorm2d  # Use regular BatchNorm here; SyncBN handled by Trainer
+            (backbone.out_channels, 7, 7),
+            [256, 256, 256, 256],
+            [1024],
+            norm_layer=torch.nn.BatchNorm2d
         )
         mask_head = MaskRCNNHeads(
-            backbone.out_channels,         # Input channels from FPN
-            [256, 256, 256, 256],          # Hidden layers channels
-            1,                             # Dilation rate (standard)
-            norm_layer=torch.nn.BatchNorm2d  # Use regular BatchNorm here; SyncBN handled by Trainer
+            backbone.out_channels,
+            [256, 256, 256, 256],
+            1,
+            norm_layer=torch.nn.BatchNorm2d
         )
 
-        # Predictors remain the same
-        box_predictor = FastRCNNPredictor(in_channels=1024, num_classes=91) # 91 for COCO
+        box_predictor = FastRCNNPredictor(in_channels=1024, num_classes=91)
         rpn_head = RPNHead(backbone.out_channels, anchor_generator.num_anchors_per_location()[0], conv_depth=2)
-        mask_predictor = MaskRCNNPredictor(in_channels=256, dim_reduced=256, num_classes=91) # 91 for COCO
+        mask_predictor = MaskRCNNPredictor(in_channels=256, dim_reduced=256, num_classes=91)
 
-        # Assemble the Mask R-CNN model
         self.model = MaskRCNN(
             backbone=backbone,
-            num_classes=None, # Required for custom heads
-            # image_mean, image_std - Consider adding if needed, depends on backbone pretraining
-            min_size=args.target_size[0], # Use target_size for consistency
+            num_classes=None,
+            min_size=args.target_size[0],
             max_size=args.target_size[1],
             rpn_anchor_generator=anchor_generator,
             rpn_head=rpn_head,
-            rpn_pre_nms_top_n_train=3000, # Adjusted potentially higher value
-            rpn_pre_nms_top_n_test=3000,  # Adjusted potentially higher value
-            rpn_post_nms_top_n_train=3000,# Adjusted potentially higher value
-            rpn_post_nms_top_n_test=3000, # Adjusted potentially higher value
+            rpn_pre_nms_top_n_train=3000,
+            rpn_pre_nms_top_n_test=3000,
+            rpn_post_nms_top_n_train=3000,
+            rpn_post_nms_top_n_test=3000,
             rpn_nms_thresh=0.7,
             rpn_fg_iou_thresh=0.7,
             rpn_bg_iou_thresh=0.3,
-            rpn_batch_size_per_image=1024, # Increased potentially
+            rpn_batch_size_per_image=1024,
             rpn_positive_fraction=0.5,
             box_roi_pool=roi_pooler,
-            box_head=box_head,             # Use custom box_head
-            box_predictor=box_predictor,   # Use custom box_predictor
+            box_head=box_head,
+            box_predictor=box_predictor,
             box_score_thresh=0.05,
             box_nms_thresh=0.5,
-            box_detections_per_img=3000,   # Increased potentially
+            box_detections_per_img=3000,
             box_fg_iou_thresh=0.5,
             box_bg_iou_thresh=0.5,
             box_batch_size_per_image=512,
             box_positive_fraction=0.25,
             mask_roi_pool=mask_roi_pooler,
-            mask_head=mask_head,           # Use custom mask_head
-            mask_predictor=mask_predictor  # Use custom mask_predictor
+            mask_head=mask_head,
+            mask_predictor=mask_predictor
         )
-        #self.model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
 
     def forward(self, images, targets=None):
         if self.training and targets is not None:
@@ -441,139 +433,159 @@ class MaskRCNNLightning(pl.LightningModule):
         images, targets = batch
         if images is None or targets is None:
             console_logger.warning(f"[{self.global_rank}] Empty batch received at step {self.global_step}, skipping.")
-            return None # Skip this step
+            return None
 
-        # Determine actual batch size BEFORE processing
         actual_batch_size = len(images)
         if actual_batch_size == 0:
-             console_logger.warning(f"[{self.global_rank}] Batch with zero images received at step {self.global_step}, skipping.")
-             return None
+            console_logger.warning(f"[{self.global_rank}] Batch with zero images received at step {self.global_step}, skipping.")
+            return None
 
-        images = list(image.to(self.device) for image in images) # Ensure images are on device
+        images = list(image.to(self.device) for image in images)
         targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
 
         try:
-            # Ensure model is in training mode (Lightning usually handles this)
             self.model.train()
             loss_dict = self.model(images, targets)
         except Exception as e:
-            console_logger.error(f"[{self.global_rank}] Model forward/loss calculation failed at step {self.global_step}: {e}", exc_info=True) # Log traceback
-            # Depending on the error, decide whether to skip or stop
-            # Returning None skips the optimizer step for this batch
+            console_logger.error(f"[{self.global_rank}] Model forward/loss calculation failed at step {self.global_step}: {e}", exc_info=True)
             return None
 
-        # Validate loss_dict
         if not loss_dict or not isinstance(loss_dict, dict):
-             console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict at step {self.global_step}. Skipping step.")
-             return None
+            console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict at step {self.global_step}. Skipping step.")
+            return None
 
-        # Aggregate losses, ensuring they are valid tensors
         losses = []
         valid_loss_keys = []
         for key, loss in loss_dict.items():
-             # Check if the loss component is valid
-             if torch.is_tensor(loss) and not torch.isnan(loss) and not torch.isinf(loss):
-                 # Apply weight IF the key exists in our weights dict
-                 weight = loss_weights.get(key, 1.0) # Default to 1.0 if key not found
-                 losses.append(loss * weight)
-                 valid_loss_keys.append(key)
-             else:
-                  console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for loss key '{key}' at step {self.global_step}: {loss}. Skipping this component.")
+            if torch.is_tensor(loss) and not torch.isnan(loss) and not torch.isinf(loss):
+                weight = loss_weights.get(key, 1.0)
+                losses.append(loss * weight)
+                valid_loss_keys.append(key)
+            else:
+                console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for loss key '{key}' at step {self.global_step}: {loss}. Skipping this component.")
 
-        # Check if we have any valid losses left
         if not losses:
             console_logger.warning(f"[{self.global_rank}] No valid loss components found in loss_dict at step {self.global_step}. Skipping backward pass.")
             return None
 
-        # Sum valid, weighted losses
         total_loss = sum(losses)
 
-        # Final check on total_loss
         if not torch.is_tensor(total_loss) or torch.isnan(total_loss) or torch.isinf(total_loss):
-             console_logger.error(f"[{self.global_rank}] Invalid total loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Skipping step.")
-             return None # Skip optimizer step if total loss is invalid
+            console_logger.error(f"[{self.global_rank}] Invalid total loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Skipping step.")
+            return None
 
-
-        # --- MODIFICATION: Add batch_size and check validity ---
         self.log('train/loss', total_loss, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
-        for key in valid_loss_keys: # Log only the valid components used
-             loss_val = loss_dict[key]
-             # Check again before logging just in case (though checked above)
-             if torch.is_tensor(loss_val) and not torch.isnan(loss_val) and not torch.isinf(loss_val):
-                 self.log(f'train/{key}', loss_val, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+        for key in valid_loss_keys:
+            loss_val = loss_dict[key]
+            if torch.is_tensor(loss_val) and not torch.isnan(loss_val) and not torch.isinf(loss_val):
+                self.log(f'train/{key}', loss_val, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
 
-        # Log gradient histograms (Conceptually happens after backward)
-        # Check added for self.logger and experiment existence
         if self.global_step % 50 == 0 and self.logger and hasattr(self.logger, 'experiment') and self.logger.experiment and self.trainer.is_global_zero:
-             # Wrapping histogram logging in try-except
-             try:
-                 with torch.no_grad(): # Ensure no gradients are calculated here
+            try:
+                with torch.no_grad():
                     for name, param in self.model.named_parameters():
-                        # Log histograms only on rank 0 to avoid clutter/redundancy
-                        if param.grad is not None and 'backbone' not in name: # Focus on non-backbone
-                            # Ensure param.grad is valid before logging
+                        if param.grad is not None and 'backbone' not in name:
                             if not torch.isnan(param.grad).any() and not torch.isinf(param.grad).any():
                                 self.logger.experiment.log({
-                                    f"gradients/{name}": wandb.Histogram(param.grad.detach().cpu().numpy()) # Detach and move to CPU
-                                }, step=self.global_step) # Explicitly log step
+                                    f"gradients/{name}": wandb.Histogram(param.grad.detach().cpu().numpy())
+                                }, step=self.global_step)
                             else:
                                 console_logger.warning(f"[{self.global_rank}] Found NaN/Inf in gradient for {name} at step {self.global_step}. Skipping histogram logging.")
-             except Exception as e:
-                 console_logger.warning(f"[{self.global_rank}] Failed to log gradient histogram at step {self.global_step}: {e}")
+            except Exception as e:
+                console_logger.warning(f"[{self.global_rank}] Failed to log gradient histogram at step {self.global_step}: {e}")
 
+        return total_loss
 
-        return total_loss # Return the valid total loss tensor for backward pass
+    def validation_step(self, batch, batch_idx):
+        images, targets = batch
+        if images is None or targets is None:
+            console_logger.warning(f"[{self.global_rank}] Empty validation batch at step {self.global_step}, skipping.")
+            return None
+
+        actual_batch_size = len(images)
+        if actual_batch_size == 0:
+            console_logger.warning(f"[{self.global_rank}] Validation batch with zero images at step {self.global_step}, skipping.")
+            return None
+
+        images = list(image.to(self.device) for image in images)
+        targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
+
+        try:
+            self.model.eval()
+            with torch.no_grad():
+                loss_dict = self.model(images, targets)
+        except Exception as e:
+            console_logger.error(f"[{self.global_rank}] Validation forward/loss calculation failed at step {self.global_step}: {e}")
+            return None
+
+        if not loss_dict or not isinstance(loss_dict, dict):
+            console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict in validation at step {self.global_step}. Skipping step.")
+            return None
+
+        losses = []
+        valid_loss_keys = []
+        for key, loss in loss_dict.items():
+            if torch.is_tensor(loss) and not torch.isnan(loss) and not torch.isinf(loss):
+                weight = loss_weights.get(key, 1.0)
+                losses.append(loss * weight)
+                valid_loss_keys.append(key)
+            else:
+                console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for validation loss key '{key}' at step {self.global_step}: {loss}. Skipping this component.")
+
+        if not losses:
+            console_logger.warning(f"[{self.global_rank}] No valid loss components found in validation loss_dict at step {self.global_step}. Skipping step.")
+            return None
+
+        total_loss = sum(losses)
+
+        if not torch.is_tensor(total_loss) or torch.isnan(total_loss) or torch.isinf(total_loss):
+            console_logger.error(f"[{self.global_rank}] Invalid total validation loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Skipping step.")
+            return None
+
+        self.log('val/loss', total_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+        for key in valid_loss_keys:
+            loss_val = loss_dict[key]
+            if torch.is_tensor(loss_val) and not torch.isnan(loss_val) and not torch.isinf(loss_val):
+                self.log(f'val/{key}', loss_val, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+
+        return total_loss
 
     def configure_optimizers(self):
-        # Filter parameters to ensure only those requiring gradients are optimized
         optimizer = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, self.parameters()),
             lr=self.lr,
-            weight_decay=self.weight_decay
+            weight_decay=self.weight_decay,
+            amsgrad=True
         )
 
-        # Calculate total steps for the scheduler robustly
         total_steps = 0
         if self.trainer and hasattr(self.trainer, 'datamodule') and self.trainer.datamodule and self.trainer.max_epochs is not None and self.trainer.max_epochs > 0:
             try:
-                # Need the dataloader from the datamodule
-                # Calling train_dataloader() might initialize it if not already done
                 train_loader = self.trainer.datamodule.train_dataloader()
-                
-                # len(dataloader) gives number of batches per process per epoch
                 steps_per_epoch_per_process = len(train_loader)
-
                 if steps_per_epoch_per_process <= 0:
-                     raise ValueError("len(train_dataloader) returned <= 0")
-
-                # The total number of optimization steps across all epochs
+                    raise ValueError("len(train_dataloader) returned <= 0")
                 total_optimization_steps = steps_per_epoch_per_process * self.trainer.max_epochs
-
                 console_logger.info(f"[{self.global_rank}] Scheduler calculation: Steps/epoch/process = {steps_per_epoch_per_process}, Max epochs = {self.trainer.max_epochs}")
                 console_logger.info(f"[{self.global_rank}] Calculated total optimization steps for OneCycleLR: {total_optimization_steps}")
-
                 if total_optimization_steps <= 0:
-                     raise ValueError("Calculated total_optimization_steps is not positive.")
-
+                    raise ValueError("Calculated total_optimization_steps is not positive.")
                 total_steps = total_optimization_steps
-
             except Exception as e:
                 console_logger.warning(f"[{self.global_rank}] Failed to accurately calculate total steps for LR scheduler: {e}. Using fallback estimate (2000 * max_epochs).")
-                # More generous fallback? Consider basing on dataset size if possible
                 fallback_estimate = 2000 * self.trainer.max_epochs
-                total_steps = max(1000, fallback_estimate) # Ensure at least 1000 steps
+                total_steps = max(1000, fallback_estimate)
                 console_logger.info(f"[{self.global_rank}] Using fallback total_steps = {total_steps} for scheduler.")
         else:
-             # This case might happen if configure_optimizers is called very early or max_epochs isn't set
-             console_logger.warning(f"[{self.global_rank}] Trainer/datamodule/max_epochs not fully available during optimizer configuration. Using fallback total_steps = 10000 for scheduler.")
-             total_steps = 10000 # Larger fallback if essential info is missing
+            console_logger.warning(f"[{self.global_rank}] Trainer/datamodule/max_epochs not fully available during optimizer configuration. Using fallback total_steps = 10000 for scheduler.")
+            total_steps = 10000
 
         console_logger.info(f"[{self.global_rank}] OneCycleLR using total_steps = {total_steps}")
 
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer,
-            max_lr=self.lr,
-            total_steps=total_steps, # Use the calculated total steps
+            max_lr=self.lr * 10,
+            total_steps=total_steps,
             pct_start=args.one_cycle_lr_pct,
             final_div_factor=1e5,
             three_phase=args.one_cycle_lr_three_phase
@@ -642,18 +654,27 @@ def prepare_coco_datasets(args):
         if not path.exists():
             raise FileNotFoundError(f"Dataset path not found: {path}")
         console_logger.info(f"Verified: {path}")
-    transform_tensor = T.ToTensor()
+    
+    # Define data augmentation for training
+    train_transform = T.Compose([
+        T.RandomHorizontalFlip(p=0.5),
+        T.RandomApply([T.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)], p=0.5),
+        T.RandomApply([T.GaussianBlur(kernel_size=5)], p=0.3),
+        T.ToTensor(),
+    ])
+    val_transform = T.ToTensor()
+    
     try:
-        train_dataset = CocoDetection(root=str(train_dir), annFile=str(train_ann), transform=None)
-        val_dataset = CocoDetection(root=str(val_dir), annFile=str(val_ann), transform=None)
+        train_dataset = CocoDetection(root=str(train_dir), annFile=str(train_ann), transform=train_transform)
+        val_dataset = CocoDetection(root=str(val_dir), annFile=str(val_ann), transform=val_transform)
         console_logger.info(f"Loaded COCO datasets: {len(train_dataset)} train, {len(val_dataset)} val images.")
     except Exception as e:
         console_logger.error(f"Error loading COCO dataset from {base_dir}: {e}")
         raise
-    return train_dataset, val_dataset, transform_tensor
+    return train_dataset, val_dataset, None
 
 class COCODataModule(pl.LightningDataModule):
-    def __init__(self, train_dataset, val_dataset, tensor_transform):
+    def __init__(self, train_dataset, val_dataset, tensor_transform=None):
         super().__init__()
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
@@ -671,7 +692,7 @@ class COCODataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset, batch_size=self.batch_size, shuffle=shuffle,
             num_workers=self.num_workers,
-            collate_fn=lambda b: collate_fn(b, self.tensor_transform),
+            collate_fn=lambda b: collate_fn(b, lambda x: x),
             pin_memory=self.pin_memory, sampler=sampler,
             persistent_workers=self.num_workers > 0,
             drop_last=True
@@ -684,7 +705,7 @@ class COCODataModule(pl.LightningDataModule):
         return DataLoader(
             self.val_dataset, batch_size=self.batch_size, shuffle=False,
             num_workers=self.num_workers,
-            collate_fn=lambda b: collate_fn(b, self.tensor_transform),
+            collate_fn=lambda b: collate_fn(b, lambda x: x),
             pin_memory=self.pin_memory, sampler=sampler,
             persistent_workers=self.num_workers > 0
         )
@@ -698,7 +719,10 @@ def collate_fn(batch, tensor_transform):
     for item in batch:
         if isinstance(item, (tuple, list)) and len(item) == 2:
             img_data, ann_data = item
-            if isinstance(img_data, Image.Image):
+            if isinstance(img_data, torch.Tensor):
+                pil_images.append(T.ToPILImage()(img_data))
+                targets_raw.append(ann_data)
+            elif isinstance(img_data, Image.Image):
                 pil_images.append(img_data)
                 targets_raw.append(ann_data)
             elif isinstance(img_data, np.ndarray):
@@ -951,9 +975,8 @@ def process_cv2_frame(model, frame_bgr, output_path, device, target_size, score_
 if __name__ == "__main__":
     pl.seed_everything(args.seed, workers=True)
     torch.backends.cudnn.benchmark = True
-    # Set TF32 usage based on your hardware and needs
-    torch.backends.cuda.matmul.allow_tf32 = True # TF32 on matmul
-    torch.backends.cudnn.allow_tf32 = True      # TF32 on cuDNN
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
     console_logger.info("Starting script...")
     console_logger.debug(f"Arguments: {vars(args)}")
@@ -963,7 +986,6 @@ if __name__ == "__main__":
     trainer = None
     best_model_path_from_training = None
 
-    # --- Setup Data (if training) ---
     if args.num_epochs > 0:
         try:
             train_dataset, val_dataset, tensor_transform = prepare_coco_datasets(args)
@@ -973,9 +995,7 @@ if __name__ == "__main__":
             console_logger.error(f"Dataset/DataModule setup failed: {e}. Cannot train.")
             exit(1)
 
-    # --- Initialize Model ---
     try:
-        # Pass hyperparameters from args to the LightningModule
         model = MaskRCNNLightning(
             model_name=args.model_name,
             lr=args.learning_rate,
@@ -986,107 +1006,96 @@ if __name__ == "__main__":
         console_logger.error(f"Failed to initialize model: {e}")
         exit(1)
 
-
-    # --- Training Phase ---
     if args.num_epochs > 0 and data_module is not None:
         console_logger.info("--- Starting Training Phase ---")
 
         ckpt_path_for_fit = None
-        # Resume logic
         if args.resume_ckpt_path and args.resume_ckpt_path.is_file():
             ckpt_path_for_fit = str(args.resume_ckpt_path)
             console_logger.info(f"Training will resume from checkpoint: {ckpt_path_for_fit}")
-        # Load weights logic (only if not resuming)
         elif args.load_model_weights and args.load_model_weights.is_file():
-             console_logger.info(f"Loading weights for training from: {args.load_model_weights}")
-             try:
-                 # Load checkpoint onto CPU first to avoid device mismatches
-                 checkpoint = torch.load(str(args.load_model_weights), map_location='cpu')
-                 # Try loading Lightning state_dict first, then raw weights
-                 if 'state_dict' in checkpoint:
-                     model.load_state_dict(checkpoint['state_dict'], strict=False) # strict=False if fine-tuning
-                     console_logger.info("Loaded state_dict from checkpoint.")
-                 elif isinstance(checkpoint, dict): # Check if it's a raw state dict
-                    model.model.load_state_dict(checkpoint, strict=False) # Load directly into model attribute
+            console_logger.info(f"Loading weights for training from: {args.load_model_weights}")
+            try:
+                checkpoint = torch.load(str(args.load_model_weights), map_location='cpu')
+                if 'state_dict' in checkpoint:
+                    model.load_state_dict(checkpoint['state_dict'], strict=False)
+                    console_logger.info("Loaded state_dict from checkpoint.")
+                elif isinstance(checkpoint, dict):
+                    model.model.load_state_dict(checkpoint, strict=False)
                     console_logger.info("Loaded raw model weights.")
-                 else:
+                else:
                     console_logger.warning(f"Unrecognized format in {args.load_model_weights}. Could not load weights.")
-                 console_logger.info("Weights loaded successfully for fine-tuning/training.")
-             except Exception as e:
-                 console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
+                console_logger.info("Weights loaded successfully for fine-tuning/training.")
+            except Exception as e:
+                console_logger.error(f"Error loading weights from {args.load_model_weights}: {e}. Training may start from scratch/pretrained.")
 
-        # Setup logging and checkpoints
         args.logs_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_dir = args.logs_dir / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         chkpt_cb = ModelCheckpoint(
-            monitor='train/loss', # Monitor training loss
+            monitor='val/loss',
             dirpath=checkpoint_dir,
-            filename='best-{epoch:02d}-{train/loss:.4f}',
+            filename='best-{epoch:02d}-{val/loss:.4f}',
             save_top_k=3,
             mode='min',
-            save_last=True # Keep the latest checkpoint
+            save_last=True
         )
         lr_mon = LearningRateMonitor(logging_interval='step')
-        callbacks = [chkpt_cb, lr_mon]
+        early_stopping = EarlyStopping(
+            monitor='val/loss',
+            patience=20,
+            mode='min',
+            verbose=True
+        )
+        callbacks = [chkpt_cb, lr_mon, early_stopping]
 
-        # Setup WandB Logger
         wandb_logger = None
-        if args.wandb_project: # Check if a project name is provided
+        if args.wandb_project:
             try:
                 wandb_logger = WandbLogger(
-                    project=args.wandb_project, # Use the argument directly
-                    log_model="all", # Log model checkpoints as W&B Artifacts
+                    project=args.wandb_project,
+                    log_model="all",
                     save_dir=str(args.logs_dir),
-                    config=vars(args) # Log hyperparameters
+                    config=vars(args)
                 )
                 console_logger.info(f"Initialized WandB logger for project: {args.wandb_project}")
             except Exception as e:
                 console_logger.warning(f"WandB setup failed: {e}. Falling back to default logger.")
-                wandb_logger = None # Ensure it's None if setup fails
+                wandb_logger = None
 
-        # Ensure GPU is available
         if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
             console_logger.error("No GPU available. This script requires a GPU for execution.")
             exit(1)
 
-        # --- Initialize Trainer ---
         trainer = pl.Trainer(
             max_epochs=args.num_epochs,
             accelerator='gpu',
-            devices=-1, # Use all available GPUs
-            strategy='ddp_find_unused_parameters_true', # Keep for now
+            devices=-1,
+            strategy='ddp_find_unused_parameters_true',
             callbacks=callbacks,
             logger=wandb_logger if wandb_logger else True,
             accumulate_grad_batches=args.gradient_accumulation_steps,
-            # --- MODIFICATION: Change precision ---
-            precision='32-true', # Use full precision to rule out AMP issues
+            precision='32-true',
             log_every_n_steps=args.log_steps,
-            sync_batchnorm=True, # Let Trainer handle SyncBatchNorm for DDP
-            # --- ADDITION: Add gradient clipping configuration ---
-            gradient_clip_val=1.0 # Example: Clip gradients at norm 1.0 (adjust as needed)
+            sync_batchnorm=True,
+            gradient_clip_val=0.5,
+            val_check_interval=1.0,
+            check_val_every_n_epoch=1
         )
 
-        # --- MODIFICATION: Add wandb.watch ---
-        # Log model graph using wandb.watch (only on rank 0)
         if wandb_logger and trainer.is_global_zero:
             try:
-                # Ensure logger experiment object is available
-                 # Common practice: watch after model is on device, before training loop
-                wandb_logger.watch(model, log='all', log_freq=max(100, args.log_steps)) # Log graph structure and optionally gradients/parameters
+                wandb_logger.watch(model, log='all', log_freq=max(100, args.log_steps))
                 console_logger.info("WandB watching model graph and parameters.")
             except Exception as e:
                 console_logger.warning(f"Failed to setup wandb.watch: {e}")
-        # -------------------------------------
 
         if trainer.is_global_zero:
             num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
             console_logger.info(f"Trainable parameters: {num_params/1e6:.2f} M")
-            # Optional: Log first few trainable param names for verification
             trainable_params = [name for name, p in model.model.named_parameters() if p.requires_grad]
             console_logger.info(f"Trainable parameter names (first 10): {trainable_params[:10]}")
-            # Log GPU memory before training starts
             if torch.cuda.is_available():
                 try:
                     free, total = torch.cuda.mem_get_info()
@@ -1094,22 +1103,20 @@ if __name__ == "__main__":
                 except Exception as e:
                     console_logger.warning(f"Failed to get GPU memory info: {e}")
 
-        # --- Run Training ---
         try:
             console_logger.info("Starting training...")
             trainer.fit(model=model, datamodule=data_module, ckpt_path=ckpt_path_for_fit)
             console_logger.info("Training finished.")
-            # Store path to best model found during training
             best_model_path_from_training = chkpt_cb.best_model_path
         except Exception as e:
             console_logger.error(f"Training failed: {e}")
-            # Optionally re-raise or handle specific exceptions
-            exit(1) # Exit if training fails critically
+            exit(1)
     elif args.num_epochs == 0:
         console_logger.info("Skipping training phase (num_epochs = 0).")
     else:
         console_logger.error("Cannot train because DataModule initialization failed.")
         exit(1)
+
     run_inference = args.image_path or args.input_dir or args.video_path
     is_rank_zero = torch.distributed.get_rank() == 0 if torch.distributed.is_initialized() else True
     if run_inference and is_rank_zero:
@@ -1225,7 +1232,6 @@ if __name__ == "__main__":
         try:
             torch.distributed.barrier()
         except Exception as e:
-            # This might fail if training failed and ranks are inconsistent
             console_logger.warning(f"Distributed barrier failed at script end: {e}")
 
     console_logger.info("Script finished.")
