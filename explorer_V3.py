@@ -715,14 +715,22 @@ def collate_fn(batch, tensor_transform):
     if not callable(tensor_transform):
         console_logger.error(f"tensor_transform is not callable: {type(tensor_transform)}")
         return None, None
+    
+    # Initialize lists for images and targets
     pil_images = []
     targets_raw = []
+    
+    # Process each item in the batch
     for item in batch:
         if isinstance(item, (tuple, list)) and len(item) == 2:
             img_data, ann_data = item
             if isinstance(img_data, torch.Tensor):
-                pil_images.append(T.ToPILImage()(img_data))
-                targets_raw.append(ann_data)
+                # Convert tensor back to PIL for consistent processing
+                try:
+                    pil_images.append(T.ToPILImage()(img_data))
+                    targets_raw.append(ann_data)
+                except Exception as e:
+                    console_logger.warning(f"Failed to convert tensor to PIL: {e}. Skipping item.")
             elif isinstance(img_data, Image.Image):
                 pil_images.append(img_data)
                 targets_raw.append(ann_data)
@@ -736,21 +744,33 @@ def collate_fn(batch, tensor_transform):
                 console_logger.warning(f"Unexpected image data type: {type(img_data)}. Skipping item.")
         else:
             console_logger.warning(f"Unexpected batch item format: {type(item)}. Skipping item.")
+    
     if not pil_images:
         console_logger.warning("No valid images in batch.")
         return None, None
+    
+    # Process images: resize, pad, and convert to tensors
     processed_images = []
     all_metadata = []
     target_size_h, target_size_w = tuple(args.target_size)
+    to_tensor = T.ToTensor()  # Fallback transform
+    
     for img_pil in pil_images:
         processed_pil, metadata = resize_and_pad_image(img_pil, tuple(args.target_size))
         try:
-            processed_images.append(tensor_transform(processed_pil))
+            # Apply tensor_transform if provided, else use fallback
+            img_tensor = tensor_transform(processed_pil) if callable(tensor_transform) else to_tensor(processed_pil)
+            if not isinstance(img_tensor, torch.Tensor):
+                console_logger.warning("tensor_transform did not return a tensor. Using fallback ToTensor.")
+                img_tensor = to_tensor(processed_pil)
+            processed_images.append(img_tensor)
             all_metadata.append(metadata)
         except Exception as e:
-            console_logger.error(f"ToTensor transform failed: {e}. Using zero tensor.")
+            console_logger.error(f"Tensor conversion failed: {e}. Using zero tensor.")
             processed_images.append(torch.zeros((3, target_size_h, target_size_w)))
             all_metadata.append({'original_size': (0, 0), 'resized_size': (0, 0), 'padding': (0, 0), 'scale': 1.0})
+    
+    # Process targets (annotations)
     processed_targets = []
     for idx, target_list in enumerate(targets_raw):
         metadata = all_metadata[idx]
@@ -846,11 +866,14 @@ def collate_fn(batch, tensor_transform):
                 'area': torch.empty(0, dtype=torch.float32), 'iscrowd': torch.empty(0, dtype=torch.uint8)
             }
         processed_targets.append(target_dict)
+    
+    # Stack images into a batch
     try:
         images_batch = torch.stack(processed_images)
     except Exception as e:
         console_logger.error(f"Failed to stack images into batch: {e}")
         return None, None
+    
     return images_batch, processed_targets
 
 # --- Inference Helper Functions ---
