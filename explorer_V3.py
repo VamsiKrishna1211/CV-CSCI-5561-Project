@@ -431,15 +431,12 @@ class MaskRCNNLightning(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         images, targets = batch
-        if images is None or targets is None:
-            console_logger.warning(f"[{self.global_rank}] Empty batch received at step {self.global_step}, skipping.")
-            return None
+        if images is None or targets is None or len(images) == 0:
+            console_logger.warning(f"[{self.global_rank}] Empty or invalid batch at step {self.global_step}. Returning zero loss.")
+            self.log('train/loss', 0.0, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=1)
+            return torch.tensor(0.0, device=self.device, requires_grad=True)
 
         actual_batch_size = len(images)
-        if actual_batch_size == 0:
-            console_logger.warning(f"[{self.global_rank}] Batch with zero images received at step {self.global_step}, skipping.")
-            return None
-
         images = list(image.to(self.device) for image in images)
         targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
 
@@ -448,11 +445,13 @@ class MaskRCNNLightning(pl.LightningModule):
             loss_dict = self.model(images, targets)
         except Exception as e:
             console_logger.error(f"[{self.global_rank}] Model forward/loss calculation failed at step {self.global_step}: {e}", exc_info=True)
-            return None
+            self.log('train/loss', 0.0, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=True)
 
         if not loss_dict or not isinstance(loss_dict, dict):
-            console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict at step {self.global_step}. Skipping step.")
-            return None
+            console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict at step {self.global_step}. Returning zero loss.")
+            self.log('train/loss', 0.0, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=True)
 
         losses = []
         valid_loss_keys = []
@@ -462,17 +461,19 @@ class MaskRCNNLightning(pl.LightningModule):
                 losses.append(loss * weight)
                 valid_loss_keys.append(key)
             else:
-                console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for loss key '{key}' at step {self.global_step}: {loss}. Skipping this component.")
+                console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for loss key '{key}' at step {self.global_step}: {loss}. Ignoring this component.")
 
         if not losses:
-            console_logger.warning(f"[{self.global_rank}] No valid loss components found in loss_dict at step {self.global_step}. Skipping backward pass.")
-            return None
+            console_logger.warning(f"[{self.global_rank}] No valid loss components found in loss_dict at step {self.global_step}. Returning zero loss.")
+            self.log('train/loss', 0.0, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=True)
 
         total_loss = sum(losses)
 
         if not torch.is_tensor(total_loss) or torch.isnan(total_loss) or torch.isinf(total_loss):
-            console_logger.error(f"[{self.global_rank}] Invalid total loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Skipping step.")
-            return None
+            console_logger.error(f"[{self.global_rank}] Invalid total loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Returning zero loss.")
+            self.log('train/loss', 0.0, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=True)
 
         self.log('train/loss', total_loss, prog_bar=True, on_step=True, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
         for key in valid_loss_keys:
@@ -493,20 +494,16 @@ class MaskRCNNLightning(pl.LightningModule):
                                 console_logger.warning(f"[{self.global_rank}] Found NaN/Inf in gradient for {name} at step {self.global_step}. Skipping histogram logging.")
             except Exception as e:
                 console_logger.warning(f"[{self.global_rank}] Failed to log gradient histogram at step {self.global_step}: {e}")
-
         return total_loss
 
     def validation_step(self, batch, batch_idx):
         images, targets = batch
-        if images is None or targets is None:
-            console_logger.warning(f"[{self.global_rank}] Empty validation batch at step {self.global_step}, skipping.")
-            return None
+        if images is None or targets is None or len(images) == 0:
+            console_logger.warning(f"[{self.global_rank}] Empty or invalid validation batch at step {self.global_step}. Returning zero loss.")
+            self.log('val/loss', 0.0, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=1)
+            return torch.tensor(0.0, device=self.device, requires_grad=False)
 
         actual_batch_size = len(images)
-        if actual_batch_size == 0:
-            console_logger.warning(f"[{self.global_rank}] Validation batch with zero images at step {self.global_step}, skipping.")
-            return None
-
         images = list(image.to(self.device) for image in images)
         targets = [{k: v.to(self.device) for k, v in t.items()} for t in targets]
 
@@ -516,11 +513,13 @@ class MaskRCNNLightning(pl.LightningModule):
                 loss_dict = self.model(images, targets)
         except Exception as e:
             console_logger.error(f"[{self.global_rank}] Validation forward/loss calculation failed at step {self.global_step}: {e}")
-            return None
+            self.log('val/loss', 0.0, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=False)
 
         if not loss_dict or not isinstance(loss_dict, dict):
-            console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict in validation at step {self.global_step}. Skipping step.")
-            return None
+            console_logger.warning(f"[{self.global_rank}] Model returned empty or invalid loss_dict in validation at step {self.global_step}. Returning zero loss.")
+            self.log('val/loss', 0.0, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=False)
 
         losses = []
         valid_loss_keys = []
@@ -530,17 +529,19 @@ class MaskRCNNLightning(pl.LightningModule):
                 losses.append(loss * weight)
                 valid_loss_keys.append(key)
             else:
-                console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for validation loss key '{key}' at step {self.global_step}: {loss}. Skipping this component.")
+                console_logger.warning(f"[{self.global_rank}] Invalid or non-tensor value for validation loss key '{key}' at step {self.global_step}: {loss}. Ignoring this component.")
 
         if not losses:
-            console_logger.warning(f"[{self.global_rank}] No valid loss components found in validation loss_dict at step {self.global_step}. Skipping step.")
-            return None
+            console_logger.warning(f"[{self.global_rank}] No valid loss components found in validation loss_dict at step {self.global_step}. Returning zero loss.")
+            self.log('val/loss', 0.0, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=False)
 
         total_loss = sum(losses)
 
         if not torch.is_tensor(total_loss) or torch.isnan(total_loss) or torch.isinf(total_loss):
-            console_logger.error(f"[{self.global_rank}] Invalid total validation loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Skipping step.")
-            return None
+            console_logger.error(f"[{self.global_rank}] Invalid total validation loss calculated ({total_loss}) at step {self.global_step} from keys {valid_loss_keys}. Returning zero loss.")
+            self.log('val/loss', 0.0, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
+            return torch.tensor(0.0, device=self.device, requires_grad=False)
 
         self.log('val/loss', total_loss, prog_bar=True, on_step=False, on_epoch=True, logger=True, sync_dist=True, batch_size=actual_batch_size)
         for key in valid_loss_keys:
