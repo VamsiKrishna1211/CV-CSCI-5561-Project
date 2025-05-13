@@ -1,0 +1,2 @@
+[console_scripts]
+disparity_mapper = disparity_mapping.disparity_mapper:main

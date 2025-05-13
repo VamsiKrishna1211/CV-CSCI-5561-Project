@@ -1,0 +1,28 @@
+running develop
+Removing /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo-slam-py.egg-link (link to .)
+running egg_info
+writing ../../build/stereo_slam_py/stereo_slam_py.egg-info/PKG-INFO
+writing dependency_links to ../../build/stereo_slam_py/stereo_slam_py.egg-info/dependency_links.txt
+writing entry points to ../../build/stereo_slam_py/stereo_slam_py.egg-info/entry_points.txt
+writing requirements to ../../build/stereo_slam_py/stereo_slam_py.egg-info/requires.txt
+writing top-level names to ../../build/stereo_slam_py/stereo_slam_py.egg-info/top_level.txt
+reading manifest file '../../build/stereo_slam_py/stereo_slam_py.egg-info/SOURCES.txt'
+writing manifest file '../../build/stereo_slam_py/stereo_slam_py.egg-info/SOURCES.txt'
+running build
+running build_py
+copying stereo_slam_py/slam_node.py -> /root/project/slam_ws/build/stereo_slam_py/build/lib/stereo_slam_py
+running install
+running install_lib
+creating /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py
+copying /root/project/slam_ws/build/stereo_slam_py/build/lib/stereo_slam_py/slam_node.py -> /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py
+copying /root/project/slam_ws/build/stereo_slam_py/build/lib/stereo_slam_py/__init__.py -> /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py
+byte-compiling /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py/slam_node.py to slam_node.cpython-310.pyc
+byte-compiling /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py/__init__.py to __init__.cpython-310.pyc
+running install_data
+copying resource/stereo_slam_py -> /root/project/slam_ws/install/stereo_slam_py/share/ament_index/resource_index/packages
+copying package.xml -> /root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py
+running install_egg_info
+Copying ../../build/stereo_slam_py/stereo_slam_py.egg-info to /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py-0.0.0-py3.10.egg-info
+running install_scripts
+Installing stereo_slam_node script to /root/project/slam_ws/install/stereo_slam_py/lib/stereo_slam_py
+writing list of installed files to '/root/project/slam_ws/build/stereo_slam_py/install.log'

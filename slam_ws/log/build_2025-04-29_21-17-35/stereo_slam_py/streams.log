@@ -1,0 +1,21 @@
+[0.249s] Invoking command in '/root/project/slam_ws/src/stereo_slam_py': PYTHONPATH=/root/project/slam_ws/build/stereo_slam_py/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(.venv) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/stereo_slam_py build --build-base /root/project/slam_ws/build/stereo_slam_py/build install --record /root/project/slam_ws/build/stereo_slam_py/install.log --single-version-externally-managed install_data
+[0.348s] running egg_info
+[0.348s] writing ../../build/stereo_slam_py/stereo_slam_py.egg-info/PKG-INFO
+[0.348s] writing dependency_links to ../../build/stereo_slam_py/stereo_slam_py.egg-info/dependency_links.txt
+[0.348s] writing entry points to ../../build/stereo_slam_py/stereo_slam_py.egg-info/entry_points.txt
+[0.348s] writing requirements to ../../build/stereo_slam_py/stereo_slam_py.egg-info/requires.txt
+[0.348s] writing top-level names to ../../build/stereo_slam_py/stereo_slam_py.egg-info/top_level.txt
+[0.349s] reading manifest file '../../build/stereo_slam_py/stereo_slam_py.egg-info/SOURCES.txt'
+[0.349s] writing manifest file '../../build/stereo_slam_py/stereo_slam_py.egg-info/SOURCES.txt'
+[0.349s] running build
+[0.349s] running build_py
+[0.349s] running install
+[0.350s] running install_lib
+[0.350s] running install_data
+[0.350s] running install_egg_info
+[0.351s] removing '/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py-0.0.0-py3.10.egg-info' (and everything under it)
+[0.351s] Copying ../../build/stereo_slam_py/stereo_slam_py.egg-info to /root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages/stereo_slam_py-0.0.0-py3.10.egg-info
+[0.351s] running install_scripts
+[0.359s] Installing stereo_slam_node script to /root/project/slam_ws/install/stereo_slam_py/lib/stereo_slam_py
+[0.359s] writing list of installed files to '/root/project/slam_ws/build/stereo_slam_py/install.log'
+[0.368s] Invoked command in '/root/project/slam_ws/src/stereo_slam_py' returned '0': PYTHONPATH=/root/project/slam_ws/build/stereo_slam_py/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(.venv) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/stereo_slam_py build --build-base /root/project/slam_ws/build/stereo_slam_py/build install --record /root/project/slam_ws/build/stereo_slam_py/install.log --single-version-externally-managed install_data
