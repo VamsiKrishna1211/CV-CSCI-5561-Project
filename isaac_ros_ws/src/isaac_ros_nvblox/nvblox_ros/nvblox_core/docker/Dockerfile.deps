@@ -1,0 +1,47 @@
+FROM nvcr.io/nvidia/cuda:12.6.0-devel-ubuntu20.04
+
+# TZData goes first.
+RUN apt-get update
+ENV TZ Europe/Berlin
+ENV DEBIAN_FRONTEND noninteractive
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt-get update && apt-get install -y tzdata
+
+# Install basics.
+RUN apt-get update && apt-get install -y ssh git jq gnupg apt-utils software-properties-common build-essential sudo python3-pip cmake
+
+# Install Open3D system dependencies
+#NOTE(alexmillane): The lines below are taken from: http://www.open3d.org/docs/release/docker.html
+#NOTE(alexmillane): In the latest open3d version 0.17.0 the visualizer view control is broken (known issue)
+# so if you need this you may have to downgrade 0.16.0. For the time being I'm using 0.17.0.
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    libegl1 \
+    libgl1 \
+    libgomp1
+
+# Install devtools
+RUN apt-get update && apt-get install -y cuda-nsight-systems-12-6 bc clang-format parallel
+
+# Install globally required python modules.
+# Note that per-package deps are specified in individual requirements.txt files and are instaleld automatically during the build step.
+RUN python3 -m pip install --no-cache-dir --upgrade pip && pip install -U pytest==4.6 yapf==0.40 pylint==3.0 pydocstyle==6.3 wheel==0.43
+
+# Upgrade cmake to 3.22.1
+# We need this to build with c++17 under CMAKE.
+# NOTE: The commands below are taken from isaac_ros_common/docker/Dockerfile.aarch64
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | sudo tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null \
+    && echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ focal main' | sudo tee /etc/apt/sources.list.d/kitware.list >/dev/null \
+    && apt-get update \
+    && rm /usr/share/keyrings/kitware-archive-keyring.gpg \
+    && apt-get install -y kitware-archive-keyring \
+    && apt-get remove -y cmake && apt-get purge -y cmake && apt-get remove -y cmake-data && apt-get purge -y cmake \
+    && apt-get install -y cmake=3.22.1-0kitware1ubuntu20.04.1 cmake-data=3.22.1-0kitware1ubuntu20.04.1 \
+    && cmake --version \
+&& rm -rf /var/lib/apt/lists/* \
+&& apt-get clean
+
+ENV DEBIAN_FRONTEND teletype
+
+# Setup search paths by adding them to the global bashrc.
+RUN echo 'PATH=$PATH:/usr/local/cuda/bin' | tee --append /etc/bash.bashrc && \
+    echo 'export CMAKE_PREFIX_PATH=/usr/local/lib/python3.8/dist-packages/torch/share/cmake/Torch' | tee --append /etc/bash.bashrc

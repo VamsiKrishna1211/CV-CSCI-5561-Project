@@ -1,0 +1,2 @@
+[console_scripts]
+yolo_processor = yolo_ros2_inference.yolo_processor:main

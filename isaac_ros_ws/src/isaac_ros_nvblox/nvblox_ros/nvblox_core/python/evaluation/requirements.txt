@@ -1,0 +1,10 @@
+matplotlib
+numpy==1.24 # Fixed version of numpy for compatibility with other modules.
+plotly
+open3d
+pandas
+scipy
+trimesh==4.4.0 # Fixed version of trimesh to avoid a incompatible version getting pulled in
+GitPython
+moviepy
+kaleido

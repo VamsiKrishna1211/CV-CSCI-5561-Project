@@ -1,0 +1,20 @@
+running egg_info
+writing ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/PKG-INFO
+writing dependency_links to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/dependency_links.txt
+writing entry points to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/entry_points.txt
+writing requirements to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/requires.txt
+writing top-level names to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/top_level.txt
+ERROR setuptools_scm._file_finders.git listing git files failed - pretending there aren't any
+reading manifest file '../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/SOURCES.txt'
+writing manifest file '../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/SOURCES.txt'
+running build
+running build_py
+running install
+running install_lib
+running install_data
+running install_egg_info
+removing '/root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference-0.0.0-py3.10.egg-info' (and everything under it)
+Copying ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info to /root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference-0.0.0-py3.10.egg-info
+running install_scripts
+Installing yolo_processor script to /root/project/slam_ws/install/yolo_ros2_inference/lib/yolo_ros2_inference
+writing list of installed files to '/root/project/slam_ws/build/yolo_ros2_inference/install.log'

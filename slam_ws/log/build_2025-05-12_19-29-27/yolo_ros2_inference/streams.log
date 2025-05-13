@@ -1,0 +1,38 @@
+[0.946s] Invoking command in '/root/project/slam_ws/src/yolo_ros2_inference': PYTHONPATH=/root/project/slam_ws/build/yolo_ros2_inference/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/yolo_ros2_inference build --build-base /root/project/slam_ws/build/yolo_ros2_inference/build install --record /root/project/slam_ws/build/yolo_ros2_inference/install.log --single-version-externally-managed install_data
+[1.136s] running egg_info
+[1.136s] creating ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info
+[1.143s] writing ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/PKG-INFO
+[1.143s] writing dependency_links to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/dependency_links.txt
+[1.143s] writing entry points to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/entry_points.txt
+[1.143s] writing requirements to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/requires.txt
+[1.143s] writing top-level names to ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/top_level.txt
+[1.143s] writing manifest file '../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/SOURCES.txt'
+[1.174s] ERROR setuptools_scm._file_finders.git listing git files failed - pretending there aren't any
+[1.232s] reading manifest file '../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/SOURCES.txt'
+[1.232s] writing manifest file '../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info/SOURCES.txt'
+[1.232s] running build
+[1.232s] running build_py
+[1.232s] creating /root/project/slam_ws/build/yolo_ros2_inference/build
+[1.232s] creating /root/project/slam_ws/build/yolo_ros2_inference/build/lib
+[1.232s] creating /root/project/slam_ws/build/yolo_ros2_inference/build/lib/yolo_ros2_inference
+[1.232s] copying yolo_ros2_inference/__init__.py -> /root/project/slam_ws/build/yolo_ros2_inference/build/lib/yolo_ros2_inference
+[1.233s] copying yolo_ros2_inference/yolo_processor.py -> /root/project/slam_ws/build/yolo_ros2_inference/build/lib/yolo_ros2_inference
+[1.233s] running install
+[1.235s] running install_lib
+[1.243s] creating /root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference
+[1.243s] copying /root/project/slam_ws/build/yolo_ros2_inference/build/lib/yolo_ros2_inference/__init__.py -> /root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference
+[1.243s] copying /root/project/slam_ws/build/yolo_ros2_inference/build/lib/yolo_ros2_inference/yolo_processor.py -> /root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference
+[1.243s] byte-compiling /root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference/__init__.py to __init__.cpython-310.pyc
+[1.243s] byte-compiling /root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference/yolo_processor.py to yolo_processor.cpython-310.pyc
+[1.244s] running install_data
+[1.244s] creating /root/project/slam_ws/install/yolo_ros2_inference/share/ament_index
+[1.244s] creating /root/project/slam_ws/install/yolo_ros2_inference/share/ament_index/resource_index
+[1.244s] creating /root/project/slam_ws/install/yolo_ros2_inference/share/ament_index/resource_index/packages
+[1.244s] copying resource/yolo_ros2_inference -> /root/project/slam_ws/install/yolo_ros2_inference/share/ament_index/resource_index/packages
+[1.244s] copying package.xml -> /root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference
+[1.244s] running install_egg_info
+[1.252s] Copying ../../build/yolo_ros2_inference/yolo_ros2_inference.egg-info to /root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages/yolo_ros2_inference-0.0.0-py3.10.egg-info
+[1.252s] running install_scripts
+[1.280s] Installing yolo_processor script to /root/project/slam_ws/install/yolo_ros2_inference/lib/yolo_ros2_inference
+[1.281s] writing list of installed files to '/root/project/slam_ws/build/yolo_ros2_inference/install.log'
+[1.300s] Invoked command in '/root/project/slam_ws/src/yolo_ros2_inference' returned '0': PYTHONPATH=/root/project/slam_ws/build/yolo_ros2_inference/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/yolo_ros2_inference build --build-base /root/project/slam_ws/build/yolo_ros2_inference/build install --record /root/project/slam_ws/build/yolo_ros2_inference/install.log --single-version-externally-managed install_data

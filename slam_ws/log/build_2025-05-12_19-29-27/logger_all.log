@@ -1,0 +1,230 @@
+[0.051s] DEBUG:colcon:Command line arguments: ['/usr/bin/colcon', 'build']
+[0.051s] DEBUG:colcon:Parsed command line arguments: Namespace(log_base=None, log_level=None, verb_name='build', build_base='build', install_base='install', merge_install=False, symlink_install=False, test_result_base=None, continue_on_error=False, executor='parallel', parallel_workers=32, event_handlers=None, ignore_user_meta=False, metas=['./colcon.meta'], base_paths=['.'], packages_ignore=None, packages_ignore_regex=None, paths=None, packages_up_to=None, packages_up_to_regex=None, packages_above=None, packages_above_and_dependencies=None, packages_above_depth=None, packages_select_by_dep=None, packages_skip_by_dep=None, packages_skip_up_to=None, packages_select_build_failed=False, packages_skip_build_finished=False, packages_select_test_failures=False, packages_skip_test_passed=False, packages_select=None, packages_skip=None, packages_select_regex=None, packages_skip_regex=None, packages_start=None, packages_end=None, allow_overriding=[], cmake_args=None, cmake_target=None, cmake_target_skip_unavailable=False, cmake_clean_cache=False, cmake_clean_first=False, cmake_force_configure=False, ament_cmake_args=None, catkin_cmake_args=None, catkin_skip_building_tests=False, verb_parser=<colcon_defaults.argument_parser.defaults.DefaultArgumentsDecorator object at 0x78080acd76a0>, verb_extension=<colcon_core.verb.build.BuildVerb object at 0x78080acd65f0>, main=<bound method BuildVerb.main of <colcon_core.verb.build.BuildVerb object at 0x78080acd65f0>>)
+[0.173s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) check parameters
+[0.173s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) check parameters
+[0.173s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) check parameters
+[0.173s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) check parameters
+[0.173s] Level 1:colcon.colcon_core.package_discovery:discover_packages(colcon_meta) discover
+[0.173s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) discover
+[0.173s] INFO:colcon.colcon_core.package_discovery:Crawling recursively for packages in '/root/project/slam_ws'
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ignore', 'ignore_ament_install']
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore'
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ignore_ament_install'
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_pkg']
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_pkg'
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['colcon_meta']
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'colcon_meta'
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['ros']
+[0.173s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'ros'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['cmake', 'python']
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'cmake'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extensions ['python_setup_py']
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(.) by extension 'python_setup_py'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extensions ['ignore', 'ignore_ament_install']
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(build) by extension 'ignore'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(build) ignored
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extensions ['ignore', 'ignore_ament_install']
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(install) by extension 'ignore'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(install) ignored
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extensions ['ignore', 'ignore_ament_install']
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(log) by extension 'ignore'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(log) ignored
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['ignore', 'ignore_ament_install']
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ignore'
+[0.180s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ignore_ament_install'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['colcon_pkg']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'colcon_pkg'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['colcon_meta']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'colcon_meta'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['ros']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'ros'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['cmake', 'python']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'cmake'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'python'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extensions ['python_setup_py']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src) by extension 'python_setup_py'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extensions ['ignore', 'ignore_ament_install']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extension 'ignore'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extension 'ignore_ament_install'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extensions ['colcon_pkg']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extension 'colcon_pkg'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extensions ['colcon_meta']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extension 'colcon_meta'
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extensions ['ros']
+[0.181s] Level 1:colcon.colcon_core.package_identification:_identify(src/disparity_mapping) by extension 'ros'
+[0.182s] DEBUG:colcon.colcon_core.package_identification:Package 'src/disparity_mapping' with type 'ros.ament_python' and name 'disparity_mapping'
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extensions ['ignore', 'ignore_ament_install']
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extension 'ignore'
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extension 'ignore_ament_install'
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extensions ['colcon_pkg']
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extension 'colcon_pkg'
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extensions ['colcon_meta']
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extension 'colcon_meta'
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extensions ['ros']
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/stereo_slam_py) by extension 'ros'
+[0.183s] DEBUG:colcon.colcon_core.package_identification:Package 'src/stereo_slam_py' with type 'ros.ament_python' and name 'stereo_slam_py'
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extensions ['ignore', 'ignore_ament_install']
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extension 'ignore'
+[0.183s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extension 'ignore_ament_install'
+[0.184s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extensions ['colcon_pkg']
+[0.184s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extension 'colcon_pkg'
+[0.184s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extensions ['colcon_meta']
+[0.184s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extension 'colcon_meta'
+[0.184s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extensions ['ros']
+[0.184s] Level 1:colcon.colcon_core.package_identification:_identify(src/yolo_ros2_inference) by extension 'ros'
+[0.184s] DEBUG:colcon.colcon_core.package_identification:Package 'src/yolo_ros2_inference' with type 'ros.ament_python' and name 'yolo_ros2_inference'
+[0.184s] Level 1:colcon.colcon_core.package_discovery:discover_packages(recursive) using defaults
+[0.184s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) discover
+[0.184s] Level 1:colcon.colcon_core.package_discovery:discover_packages(ignore) using defaults
+[0.184s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) discover
+[0.184s] Level 1:colcon.colcon_core.package_discovery:discover_packages(path) using defaults
+[0.194s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) check parameters
+[0.194s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) discover
+[0.196s] DEBUG:colcon.colcon_installed_package_information.package_discovery:Found 508 installed packages in /opt/ros/humble
+[0.197s] Level 1:colcon.colcon_core.package_discovery:discover_packages(prefix_path) using defaults
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'cmake_args' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'cmake_target' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'cmake_clean_cache' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'cmake_clean_first' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'cmake_force_configure' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'ament_cmake_args' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'catkin_cmake_args' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'disparity_mapping' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.218s] DEBUG:colcon.colcon_core.verb:Building package 'disparity_mapping' with the following arguments: {'ament_cmake_args': None, 'build_base': '/root/project/slam_ws/build/disparity_mapping', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/root/project/slam_ws/install/disparity_mapping', 'merge_install': False, 'path': '/root/project/slam_ws/src/disparity_mapping', 'symlink_install': False, 'test_result_base': None}
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'cmake_args' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'cmake_target' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'cmake_clean_cache' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'cmake_clean_first' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'cmake_force_configure' from command line to 'False'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'ament_cmake_args' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'catkin_cmake_args' from command line to 'None'
+[0.218s] Level 5:colcon.colcon_core.verb:set package 'stereo_slam_py' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.218s] DEBUG:colcon.colcon_core.verb:Building package 'stereo_slam_py' with the following arguments: {'ament_cmake_args': None, 'build_base': '/root/project/slam_ws/build/stereo_slam_py', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/root/project/slam_ws/install/stereo_slam_py', 'merge_install': False, 'path': '/root/project/slam_ws/src/stereo_slam_py', 'symlink_install': False, 'test_result_base': None}
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'cmake_args' from command line to 'None'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'cmake_target' from command line to 'None'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'cmake_target_skip_unavailable' from command line to 'False'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'cmake_clean_cache' from command line to 'False'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'cmake_clean_first' from command line to 'False'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'cmake_force_configure' from command line to 'False'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'ament_cmake_args' from command line to 'None'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'catkin_cmake_args' from command line to 'None'
+[0.219s] Level 5:colcon.colcon_core.verb:set package 'yolo_ros2_inference' build argument 'catkin_skip_building_tests' from command line to 'False'
+[0.219s] DEBUG:colcon.colcon_core.verb:Building package 'yolo_ros2_inference' with the following arguments: {'ament_cmake_args': None, 'build_base': '/root/project/slam_ws/build/yolo_ros2_inference', 'catkin_cmake_args': None, 'catkin_skip_building_tests': False, 'cmake_args': None, 'cmake_clean_cache': False, 'cmake_clean_first': False, 'cmake_force_configure': False, 'cmake_target': None, 'cmake_target_skip_unavailable': False, 'install_base': '/root/project/slam_ws/install/yolo_ros2_inference', 'merge_install': False, 'path': '/root/project/slam_ws/src/yolo_ros2_inference', 'symlink_install': False, 'test_result_base': None}
+[0.219s] INFO:colcon.colcon_core.executor:Executing jobs using 'parallel' executor
+[0.219s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete
+[0.219s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/root/project/slam_ws/src/disparity_mapping' with build type 'ament_python'
+[0.219s] Level 1:colcon.colcon_core.shell:create_environment_hook('disparity_mapping', 'ament_prefix_path')
+[0.221s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_core.shell.bat': Not used on non-Windows systems
+[0.221s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/hook/ament_prefix_path.ps1'
+[0.221s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/hook/ament_prefix_path.dsv'
+[0.222s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/hook/ament_prefix_path.sh'
+[0.222s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.222s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.224s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/root/project/slam_ws/src/stereo_slam_py' with build type 'ament_python'
+[0.224s] Level 1:colcon.colcon_core.shell:create_environment_hook('stereo_slam_py', 'ament_prefix_path')
+[0.224s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/hook/ament_prefix_path.ps1'
+[0.224s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/hook/ament_prefix_path.dsv'
+[0.224s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/hook/ament_prefix_path.sh'
+[0.224s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.224s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.226s] INFO:colcon.colcon_ros.task.ament_python.build:Building ROS package in '/root/project/slam_ws/src/yolo_ros2_inference' with build type 'ament_python'
+[0.226s] Level 1:colcon.colcon_core.shell:create_environment_hook('yolo_ros2_inference', 'ament_prefix_path')
+[0.226s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/hook/ament_prefix_path.ps1'
+[0.226s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/hook/ament_prefix_path.dsv'
+[0.226s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/hook/ament_prefix_path.sh'
+[0.226s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.226s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.445s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/root/project/slam_ws/src/stereo_slam_py'
+[0.445s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.445s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.618s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/root/project/slam_ws/src/disparity_mapping'
+[0.618s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.618s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[0.794s] INFO:colcon.colcon_core.task.python.build:Building Python package in '/root/project/slam_ws/src/yolo_ros2_inference'
+[0.795s] INFO:colcon.colcon_core.shell:Skip shell extension 'powershell' for command environment: Not usable outside of PowerShell
+[0.795s] DEBUG:colcon.colcon_core.shell:Skip shell extension 'dsv' for command environment
+[1.127s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/root/project/slam_ws/src/disparity_mapping': PYTHONPATH=/root/project/slam_ws/build/disparity_mapping/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/disparity_mapping/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/disparity_mapping build --build-base /root/project/slam_ws/build/disparity_mapping/build install --record /root/project/slam_ws/build/disparity_mapping/install.log --single-version-externally-managed install_data
+[1.129s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/root/project/slam_ws/build/stereo_slam_py': PYTHONPATH=/root/project/slam_ws/build/stereo_slam_py/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --uninstall --editable --build-directory /root/project/slam_ws/build/stereo_slam_py/build
+[1.172s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/root/project/slam_ws/src/yolo_ros2_inference': PYTHONPATH=/root/project/slam_ws/build/yolo_ros2_inference/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/yolo_ros2_inference build --build-base /root/project/slam_ws/build/yolo_ros2_inference/build install --record /root/project/slam_ws/build/yolo_ros2_inference/install.log --single-version-externally-managed install_data
+[1.447s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/root/project/slam_ws/build/stereo_slam_py' returned '0': PYTHONPATH=/root/project/slam_ws/build/stereo_slam_py/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --uninstall --editable --build-directory /root/project/slam_ws/build/stereo_slam_py/build
+[1.447s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoking command in '/root/project/slam_ws/src/stereo_slam_py': PYTHONPATH=/root/project/slam_ws/build/stereo_slam_py/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/stereo_slam_py build --build-base /root/project/slam_ws/build/stereo_slam_py/build install --record /root/project/slam_ws/build/stereo_slam_py/install.log --single-version-externally-managed install_data --force
+[1.494s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/root/project/slam_ws/src/disparity_mapping' returned '0': PYTHONPATH=/root/project/slam_ws/build/disparity_mapping/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/disparity_mapping/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/disparity_mapping build --build-base /root/project/slam_ws/build/disparity_mapping/build install --record /root/project/slam_ws/build/disparity_mapping/install.log --single-version-externally-managed install_data
+[1.497s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/disparity_mapping' for CMake module files
+[1.497s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/disparity_mapping' for CMake config files
+[1.497s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/disparity_mapping/lib'
+[1.497s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/disparity_mapping/bin'
+[1.497s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/disparity_mapping/lib/pkgconfig/disparity_mapping.pc'
+[1.497s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/disparity_mapping/lib/python3.10/site-packages'
+[1.497s] Level 1:colcon.colcon_core.shell:create_environment_hook('disparity_mapping', 'pythonpath')
+[1.497s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/hook/pythonpath.ps1'
+[1.498s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/hook/pythonpath.dsv'
+[1.498s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/hook/pythonpath.sh'
+[1.498s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/disparity_mapping/bin'
+[1.498s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(disparity_mapping)
+[1.498s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/package.ps1'
+[1.498s] INFO:colcon.colcon_core.shell:Creating package descriptor '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/package.dsv'
+[1.499s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/package.sh'
+[1.499s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/package.bash'
+[1.499s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/disparity_mapping/share/disparity_mapping/package.zsh'
+[1.500s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/root/project/slam_ws/install/disparity_mapping/share/colcon-core/packages/disparity_mapping)
+[1.525s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/yolo_ros2_inference' for CMake module files
+[1.526s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/root/project/slam_ws/src/yolo_ros2_inference' returned '0': PYTHONPATH=/root/project/slam_ws/build/yolo_ros2_inference/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/yolo_ros2_inference build --build-base /root/project/slam_ws/build/yolo_ros2_inference/build install --record /root/project/slam_ws/build/yolo_ros2_inference/install.log --single-version-externally-managed install_data
+[1.526s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/yolo_ros2_inference' for CMake config files
+[1.526s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/yolo_ros2_inference/lib'
+[1.526s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/yolo_ros2_inference/bin'
+[1.526s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/yolo_ros2_inference/lib/pkgconfig/yolo_ros2_inference.pc'
+[1.526s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/yolo_ros2_inference/lib/python3.10/site-packages'
+[1.526s] Level 1:colcon.colcon_core.shell:create_environment_hook('yolo_ros2_inference', 'pythonpath')
+[1.527s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/hook/pythonpath.ps1'
+[1.527s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/hook/pythonpath.dsv'
+[1.527s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/hook/pythonpath.sh'
+[1.527s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/yolo_ros2_inference/bin'
+[1.528s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(yolo_ros2_inference)
+[1.528s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/package.ps1'
+[1.528s] INFO:colcon.colcon_core.shell:Creating package descriptor '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/package.dsv'
+[1.528s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/package.sh'
+[1.529s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/package.bash'
+[1.529s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/yolo_ros2_inference/share/yolo_ros2_inference/package.zsh'
+[1.529s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/root/project/slam_ws/install/yolo_ros2_inference/share/colcon-core/packages/yolo_ros2_inference)
+[1.866s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/stereo_slam_py' for CMake module files
+[1.866s] DEBUG:colcon.colcon_core.event_handler.log_command:Invoked command in '/root/project/slam_ws/src/stereo_slam_py' returned '0': PYTHONPATH=/root/project/slam_ws/build/stereo_slam_py/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages:${PYTHONPATH} _=/usr/bin/env /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/stereo_slam_py build --build-base /root/project/slam_ws/build/stereo_slam_py/build install --record /root/project/slam_ws/build/stereo_slam_py/install.log --single-version-externally-managed install_data --force
+[1.866s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/stereo_slam_py' for CMake config files
+[1.867s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/stereo_slam_py/lib'
+[1.867s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/stereo_slam_py/bin'
+[1.867s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/stereo_slam_py/lib/pkgconfig/stereo_slam_py.pc'
+[1.867s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/stereo_slam_py/lib/python3.10/site-packages'
+[1.867s] Level 1:colcon.colcon_core.shell:create_environment_hook('stereo_slam_py', 'pythonpath')
+[1.867s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/hook/pythonpath.ps1'
+[1.867s] INFO:colcon.colcon_core.shell:Creating environment descriptor '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/hook/pythonpath.dsv'
+[1.868s] INFO:colcon.colcon_core.shell:Creating environment hook '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/hook/pythonpath.sh'
+[1.868s] Level 1:colcon.colcon_core.environment:checking '/root/project/slam_ws/install/stereo_slam_py/bin'
+[1.868s] Level 1:colcon.colcon_core.environment:create_environment_scripts_only(stereo_slam_py)
+[1.868s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/package.ps1'
+[1.869s] INFO:colcon.colcon_core.shell:Creating package descriptor '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/package.dsv'
+[1.869s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/package.sh'
+[1.869s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/package.bash'
+[1.869s] INFO:colcon.colcon_core.shell:Creating package script '/root/project/slam_ws/install/stereo_slam_py/share/stereo_slam_py/package.zsh'
+[1.870s] Level 1:colcon.colcon_core.environment:create_file_with_runtime_dependencies(/root/project/slam_ws/install/stereo_slam_py/share/colcon-core/packages/stereo_slam_py)
+[1.870s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:closing loop
+[1.870s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:loop closed
+[1.870s] DEBUG:colcon.colcon_parallel_executor.executor.parallel:run_until_complete finished with '0'
+[1.870s] DEBUG:colcon.colcon_core.event_reactor:joining thread
+[1.875s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.notify_send': Could not find 'notify-send'
+[1.875s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.terminal_notifier': Not used on non-Darwin systems
+[1.875s] INFO:colcon.colcon_core.plugin_system:Skipping extension 'colcon_notification.desktop_notification.win32': Not used on non-Windows systems
+[1.875s] INFO:colcon.colcon_notification.desktop_notification:Sending desktop notification using 'notify2'
+[1.876s] DEBUG:colcon.colcon_notification.desktop_notification.notify2:Failed to initialize notify2: org.freedesktop.DBus.Error.Spawn.ExecFailed: /usr/bin/dbus-launch terminated abnormally without any error message
+[1.876s] DEBUG:colcon.colcon_core.event_reactor:joined thread
+[1.877s] INFO:colcon.colcon_core.shell:Creating prefix script '/root/project/slam_ws/install/local_setup.ps1'
+[1.878s] INFO:colcon.colcon_core.shell:Creating prefix util module '/root/project/slam_ws/install/_local_setup_util_ps1.py'
+[1.879s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/root/project/slam_ws/install/setup.ps1'
+[1.880s] INFO:colcon.colcon_core.shell:Creating prefix script '/root/project/slam_ws/install/local_setup.sh'
+[1.880s] INFO:colcon.colcon_core.shell:Creating prefix util module '/root/project/slam_ws/install/_local_setup_util_sh.py'
+[1.881s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/root/project/slam_ws/install/setup.sh'
+[1.881s] INFO:colcon.colcon_core.shell:Creating prefix script '/root/project/slam_ws/install/local_setup.bash'
+[1.882s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/root/project/slam_ws/install/setup.bash'
+[1.883s] INFO:colcon.colcon_core.shell:Creating prefix script '/root/project/slam_ws/install/local_setup.zsh'
+[1.883s] INFO:colcon.colcon_core.shell:Creating prefix chain script '/root/project/slam_ws/install/setup.zsh'

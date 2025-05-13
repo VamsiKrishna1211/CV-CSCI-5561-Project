@@ -1,0 +1,2 @@
+[console_scripts]
+stereo_slam_node = stereo_slam_py.slam_node:main
